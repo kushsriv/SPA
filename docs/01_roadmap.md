@@ -2,8 +2,8 @@
 
 | Week | Goal | Deliverables | Owner |
 |---|---|---|---|
-| 1 | Research plus testbed | `00_research_proposal.md` ✅; Kafka KRaft testbed; edge → Kafka → coordinator skeleton with Centralised-Raw and Naive-Federated baselines; data loaders and non-IID partitioners | Claude codes, team reviews |
-| 2 | Core method | CF micro-clusters with delta encoding; staleness score (§5.3); dual-ascent send policy (§5.4); aggregation (§5.5); remaining baselines; netem injector; unit tests | Claude codes, team reviews |
+| 1 | Research plus testbed | `00_research_proposal.md` ✅; Kafka KRaft testbed ✅ (under 1 GB of RAM, with or without Docker); edge → Kafka → coordinator skeleton with Centralised-Raw and Naive-Federated baselines; data loaders and non-IID partitioners | Claude codes, team reviews |
+| 2 | Core method | CF micro-clusters with delta encoding; staleness score (§5.3); dual-ascent send policy (§5.4); aggregation (§5.5); remaining baselines; in-app network emulator; unit tests | Claude codes, team reviews |
 | 3 | Experiments | Experiment runner (YAML configs, seeds); RQ1–RQ5 runs; fault-injection runs; plots; statistics (Friedman/Nemenyi, Wilcoxon); proofs of Propositions 1 and 2 | Claude plus team (run on laptops) |
 | 4 | Paper | LaTeX in the target venue's template (Elsevier FGCS or IEEE IoT-J); figures; reproducibility README; internal review; submission | Claude drafts, team edits |
 

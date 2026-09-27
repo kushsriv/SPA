@@ -151,8 +151,9 @@ s += [P("1. Your requirements", H1),
           ["Coding", "Claude writes all the code", "Claude implements everything; the team reviews, runs "
            "experiments and checks references"],
           ["Timeline", "About one month", "Four-week plan with decision gates (Section 10)"],
-          ["Hardware", "Laptops only", "Single-broker Kafka in KRaft mode with a 1 GB heap; Python edge "
-           "nodes; no Flink; everything in about 8 GB of RAM"],
+          ["Hardware", "Laptops only, less than 4 GB of free RAM", "Whole testbed under 1 GB (measured): Kafka "
+           "with a 256 MB heap, with or without Docker; all edge nodes in one Python process; in-app network "
+           "emulation; no Flink or Spark"],
           ["Venues", "IEEE, ACM, Elsevier and Springer are all targets", "Shortlist across all four "
            "publishers (Section 9)"],
           ["Repository", "New repo called spa", "github.com/kushsriv/spa; Phase 0 pushed to main"],
@@ -174,8 +175,10 @@ s += [P("2. Work done so far", H1),
           ["5", "Experimental design: datasets, non-IID schemes, baselines, metrics, statistics",
            "Done", "Proposal §6"],
           ["6", "Target venue shortlist and a four-week roadmap", "Done", "Proposal §9, 01_roadmap.md"],
-          ["7", "Kafka testbed: Docker Compose, KRaft single broker, 5 topics (2 log-compacted)",
-           "Done and tested", "docker/docker-compose.yml"],
+          ["7", "Kafka testbed: KRaft single broker, 5 topics (2 log-compacted); Docker Compose "
+           "version and a no-Docker script", "Done and tested", "docker/, scripts/kafka_native.sh"],
+          ["7b", "Low-memory redesign: Kafka measured at 317–423 MB (no Docker) and at most 512 MB "
+           "(Docker, capped) under a 300k-message load test", "Measured", "docs/02_low_memory_setup.md"],
           ["8", "Tested: Kafka started, topics created, idempotent produce and consume round trip "
            "succeeded from Python", "Verified", "In this session"],
           ["9", "Architecture diagram, edge and coordinator flowcharts, Gantt chart",
@@ -386,7 +389,7 @@ s += [P("9. Target venues", H1),
           ["1", "Research and proposal ✓; Kafka testbed ✓; edge and coordinator skeleton; raw and "
            "naive baselines; data loaders and non-IID splitters"],
           ["2", "FedCAST core: summary deltas, staleness score, budget controller, aggregation; other "
-           "baselines; network-fault injection; unit tests"],
+           "baselines; in-app network emulator; unit tests"],
           ["3", "Experiment runner; RQ1–RQ5 runs; crash tests; plots; statistics; proofs"],
           ["4", "Paper in the venue's LaTeX template; reproducibility package; review; submission"],
       ], [0.1, 0.9]),
@@ -408,10 +411,14 @@ s += [P("11. What your team needs to do next", H1),
            "loaders", "Team → Claude"],
           ["7", "Run long experiments on your laptops in week 3 (one command per experiment)", "Team"],
       ], [0.06, 0.76, 0.18]),
-      P("How to run the Kafka testbed now", H2),
-      P("docker compose -f docker/docker-compose.yml up -d<br/>"
+      P("How to run the Kafka testbed now (under 1 GB of RAM)", H2),
+      P("# macOS or Windows (inside WSL2): no Docker, needs Java 17+<br/>"
+        "scripts/kafka_native.sh start<br/>"
+        "# Linux: Docker is also fine<br/>"
+        "docker compose -f docker/docker-compose.yml up -d<br/>"
         "python -m venv .venv &amp;&amp; source .venv/bin/activate<br/>"
         "pip install -r requirements.txt", MONO),
+      P("Details, measurements and a Windows WSL2 memory cap: docs/02_low_memory_setup.md", SMALL),
       P("12. Key references", H1)]
 refs = [
     "Aggarwal et al. A framework for clustering evolving data streams (CluStream). VLDB 2003.",

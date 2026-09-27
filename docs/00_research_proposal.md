@@ -130,6 +130,7 @@ Here `J` is the (weighted) k-means cost. For density-based variants we use a CMM
 - **Idempotent producers** (`enable.idempotence=true`) prevent duplicated deltas under retries. Where needed, delta-apply plus offset-commit is made transactional (exactly-once semantics).
 - **Snapshots on a log-compacted topic:** the latest full summary per node survives indefinitely. A restarted coordinator rebuilds its state by reading the compacted snapshots and replaying deltas from the committed offsets. This is the *recovery protocol* evaluated in RQ4.
 - **Downlink:** global centers go to a compacted `fsc.global` topic. Edges consume them to compute the objective-linked trigger (§5.3). This is the federated "broadcast" step, and it is also rate-limited.
+- **Laptop footprint:** the whole testbed runs in under 1 GB of RAM (measured: Kafka 317–423 MB with a 256 MB heap; all simulated edge nodes share one Python process). See `docs/02_low_memory_setup.md`.
 - **Scale-out:** coordinators form a consumer group. Partial aggregation per partition is followed by a final merge; this works because CFs are additive. PySpark Structured Streaming is an optional scale-out variant.
 
 ### 5.2 Local model (edge)
@@ -197,9 +198,9 @@ Together with Proposition 1, the budget determines λ, λ determines the thresho
 5. **Incremental aggregation:** the coordinator re-aggregates on a period or after M deltas, warm-starting from `C(t−1)`.
 
 ### 5.6 Network constraints and fault model
-- `tc netem` inside node containers adds delay (50–500 ms), jitter, loss (0–10 %), rate caps (64 kbit–10 Mbit) and scripted disconnections.
+- A seeded **in-application network emulator** in each node's send path adds delay (50–500 ms), jitter, loss (0–10 %), bandwidth caps (64 kbit–10 Mbit) and scripted disconnections. It works on any OS and costs no extra memory. On Linux, `tc netem` is an optional cross-check.
 - Node churn: scripted kill and restart of edge and coordinator containers.
-- Broker faults: a single-broker restart. A 3-broker cluster is optional if RAM allows.
+- Broker faults: a single-broker restart. A 3-broker cluster is out of scope on laptops.
 
 ### 5.7 Optional extension: privacy
 Gaussian-mechanism noise on the CF deltas, with sensitivity bounded by clipping ‖x‖ ≤ R, gives a (ε, δ) guarantee per send. The budget policy then also limits the privacy spend: fewer sends means less composition. We report this as a three-way trade-off if time permits.
@@ -267,7 +268,7 @@ Labels are used **only for evaluation**, never for clustering.
 ---
 
 ## 8. Threats to validity and mitigations
-- **Laptop scale:** this is an emulated testbed. We report per-node rates and extrapolate carefully; Docker CPU limits give per-node realism.
+- **Laptop scale:** this is an emulated testbed (all nodes in one process, emulated links, under 1 GB of RAM). We report per-node rates and extrapolate carefully. Byte counts are exact, because they are measured on real Kafka messages.
 - **Hyper-parameter sensitivity** (ρ, κ, η, β): we run sensitivity sweeps and use one fixed default configuration across all datasets.
 - **Metric bias:** we use several external and internal metrics, plus CMM for evolving streams.
 - **Dataset criticism** (KDD99): it is paired with modern datasets (CIC-IDS2017 / UNSW-NB15) and real sensor partitions.

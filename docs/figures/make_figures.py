@@ -135,7 +135,7 @@ def gantt() -> None:
         ("Edge/coordinator skeleton + raw/naive baselines", 3, 5, "todo"),
         ("Data loaders + non-IID partitioners", 4, 4, "todo"),
         ("FedCAST: CF deltas, trigger, dual ascent", 7, 6, "todo"),
-        ("Aggregation + remaining baselines + netem", 9, 5, "todo"),
+        ("Aggregation + baselines + network emulator", 9, 5, "todo"),
         ("Experiment runner, RQ1–RQ5 runs", 14, 7, "todo"),
         ("Proofs (Prop. 1 & 2), statistics, plots", 16, 6, "todo"),
         ("Paper writing (LaTeX) + artifact", 21, 7, "todo"),

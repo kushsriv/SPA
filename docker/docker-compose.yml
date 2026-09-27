@@ -3,6 +3,7 @@ services:
   kafka:
     image: apache/kafka:3.8.0
     container_name: spa-kafka
+    mem_limit: 512m
     ports:
       - "9092:9092"
     environment:
@@ -18,7 +19,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
-      KAFKA_HEAP_OPTS: "-Xmx1G -Xms512M"
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms256M"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
       interval: 5s

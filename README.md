@@ -10,10 +10,15 @@ Edge nodes cluster their local, non-IID data streams into micro-clusters. They d
 
 ## Quick start (Kafka testbed)
 
-Requires Docker, Python 3.10+ and about 4 GB of free RAM.
+Everything runs in **under 1 GB of RAM**. See [`docs/02_low_memory_setup.md`](docs/02_low_memory_setup.md) for measurements and per-OS advice.
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d        # Kafka (KRaft, single broker) + topic setup
+# Option A, no Docker (recommended on macOS and Windows/WSL2; needs Java 17+)
+scripts/kafka_native.sh start
+
+# Option B, Docker (fine on Linux; Kafka capped at 512 MB)
+docker compose -f docker/docker-compose.yml up -d
+
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -22,6 +27,7 @@ pip install -r requirements.txt
 ```
 docs/      research proposal, roadmap, later the paper drafts
 docker/    Kafka testbed (KRaft) and topic setup
+scripts/   kafka_native.sh: Kafka without Docker
 src/       (week 1–2) edge node, coordinator, algorithms, baselines
 experiments/ (week 3) configs, runners, plots
 ```
