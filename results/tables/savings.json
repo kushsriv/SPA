@@ -1,0 +1,47 @@
+{
+ "syndrift": {
+  "fedcast": 43766.8,
+  "periodic": 371524.1763441693,
+  "pdelta": 255958.702327685,
+  "kfed": 113432.89803588689,
+  "change": 573956.0,
+  "norm": 275754.4,
+  "saving_vs_best_baseline": 0.6141613168857464
+ },
+ "nslkdd": {
+  "fedcast": 361814.0644094426,
+  "periodic": 667516.7035749148,
+  "pdelta": 483976.9361744582,
+  "kfed": NaN,
+  "change": 968518.0,
+  "norm": 907376.8,
+  "saving_vs_best_baseline": 0.25241465581115996
+ },
+ "shuttle": {
+  "fedcast": 132938.63048173522,
+  "periodic": NaN,
+  "pdelta": NaN,
+  "kfed": NaN,
+  "change": 262517.37801742065,
+  "norm": 241852.8,
+  "saving_vs_best_baseline": 0.4503324729681226
+ },
+ "pendigits": {
+  "fedcast": 47983.6,
+  "periodic": 168916.22947628668,
+  "pdelta": 139973.80796235197,
+  "kfed": 53027.65132023091,
+  "change": 308982.0,
+  "norm": 309163.2,
+  "saving_vs_best_baseline": 0.09512115273162247
+ },
+ "letter": {
+  "fedcast": 82525.29464198984,
+  "periodic": 334358.2129350215,
+  "pdelta": 256290.89747157347,
+  "kfed": 204002.69429602416,
+  "change": 434697.2,
+  "norm": 412290.0,
+  "saving_vs_best_baseline": 0.5954695847191163
+ }
+}

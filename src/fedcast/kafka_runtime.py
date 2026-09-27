@@ -299,7 +299,8 @@ class KafkaCoordinator:
             ids = np.fromiter(st.keys(), np.int64, len(st))
             vals = list(st.values())
             s = codec.Summary(codec.KIND_FULL, node, self.core.last_seq.get(node, -1), self.now, ids,
-                              np.array([v[0] for v in vals]), np.array([v[1] for v in vals]).reshape(len(vals), -1),
+                              np.array([v[0] for v in vals]),
+                              np.array([v[1] for v in vals]).reshape(len(vals), self.rc.dim),
                               np.array([v[2] for v in vals]), np.array([v[3] for v in vals]), np.zeros(0, np.int64))
             self.prod.produce(T_SNAP, key=f"node-{node}".encode(), value=codec.encode_summary(s),
                               headers=[("seq", str(self.core.last_seq.get(node, -1)).encode()), ("offsets", offs)])

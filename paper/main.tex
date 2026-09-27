@@ -1,0 +1,50 @@
+\documentclass[5p,times,authoryear=false]{elsarticle}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\graphicspath{{figures/}}
+\newtheorem{proposition}{Proposition}
+\biboptions{numbers,sort&compress}
+
+\journal{Future Generation Computer Systems}
+
+\begin{document}
+\begin{frontmatter}
+
+\title{FedCAST: Budget-Aware Federated Stream Clustering over Apache Kafka under Non-IID Data and Network Constraints}
+
+\author[1]{Author One}
+\author[1]{Author Two}
+\author[1]{Author Three}
+\affiliation[1]{organization={Department of Computer Science, University Name},city={City},country={Country}}
+
+\input{sections/abstract}
+
+\begin{keyword}
+federated clustering \sep data streams \sep communication efficiency \sep non-IID data \sep Apache Kafka \sep edge computing
+\end{keyword}
+\end{frontmatter}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/method}
+\input{sections/system}
+\input{sections/experiments}
+\input{sections/results}
+\input{sections/discussion}
+
+\section*{Code and data availability}
+All code, experiment configurations, raw results and scripts that regenerate every figure and table are available in the project repository. All datasets are public.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{references}
+
+\input{sections/appendix}
+\end{document}

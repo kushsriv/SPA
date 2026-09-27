@@ -4,7 +4,10 @@
 
 \paragraph{Cluster features} Node $i$ maintains a set $S_i(t)$ of at most $q$ micro-clusters, each summarised by a time-decayed cluster feature (CF)~\cite{zhang1996birch,aggarwal2003clustream,cao2006denstream}
 \begin{equation}
-\mathrm{CF}=(n,\ \mathbf{LS},\ SS,\ \tau),\quad n=\sum_x w_x,\ \mathbf{LS}=\sum_x w_x x,\ SS=\sum_x w_x\lVert x\rVert^2,
+\begin{gathered}
+\mathrm{CF}=(n,\ \mathbf{LS},\ SS,\ \tau),\\
+n=\textstyle\sum_x w_x,\quad \mathbf{LS}=\sum_x w_x x,\quad SS=\sum_x w_x\lVert x\rVert^2,
+\end{gathered}
 \end{equation}
 with weights $w_x = 2^{-(t-t_x)/H}$ for half-life $H$ and last-update time $\tau$. Decaying a CF to time $t$ multiplies all three sums by the same factor $2^{-(t-\tau)/H}$. The centroid $\mu=\mathbf{LS}/n$ and the RMS radius are therefore invariant under decay, and a copy of a CF together with its $\tau$ determines its decayed value at any later time.
 
@@ -59,7 +62,7 @@ Once per tick, node $i$ runs Algorithm~\ref{alg:edge}.
 \begin{equation}\label{eq:trigger}
 D_c\ \ge\ \lambda_i\ p_i\ b\qquad\text{or}\qquad \text{novelty}_i\ \ge\ \max(\nu_\text{min},\ \nu\,N_i),
 \end{equation}
-provided the token bucket (rate $B_i/W$, capacity $\kappa_i=\max(B_i,\ \text{full-summary size})$) holds $b$ tokens. The novelty mass is the weight of new micro-clusters that lie farther than $3\times$ the radius from every global centre: a concept the server has not seen yet. This override is what makes node-exclusive clusters appear quickly.
+provided the token bucket holds $b$ tokens. The bucket refills at rate $B_i/W$ and has capacity $\kappa_i=\max(B_i,\ s_\text{full})$, where $s_\text{full}$ is the size of a full summary. The novelty mass is the weight of new micro-clusters that lie farther than $3\times$ the radius from every global centre: a concept the server has not seen yet. This override is what makes node-exclusive clusters appear quickly.
 
 \emph{Dual ascent.} At the end of each window the multiplier is updated multiplicatively,
 \begin{equation}\label{eq:dual}

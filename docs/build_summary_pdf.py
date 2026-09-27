@@ -1,4 +1,6 @@
-"""Build docs/Project_Summary.pdf: requirements, research plan, flowcharts, progress."""
+"""Build docs/Project_Summary.pdf: final project report (requirements, system, results, rationale, next steps).
+
+Numbers are read from results/ so the report always matches the experiments."""
 import sys
 from datetime import date
 from pathlib import Path
@@ -17,6 +19,10 @@ from reportlab.platypus import (Image, KeepTogether, ListFlowable, ListItem, Pag
 HERE = Path(__file__).resolve().parent
 FIG = HERE / "figures"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else HERE / "Project_Summary.pdf"
+ROOT = HERE.parent
+PFIG = ROOT / "paper" / "figures"
+TABS = ROOT / "results" / "tables"
+RES = ROOT / "results"
 
 FD = "/usr/share/fonts/truetype/dejavu/"
 pdfmetrics.registerFont(TTFont("DV", FD + "DejaVuSans.ttf"))
@@ -97,356 +103,251 @@ def footer(canvas, doc):
     canvas.restoreState()
 
 
-s = []
 
+
+import json
+
+
+def jload(p, default=None):
+    try:
+        return json.load(open(p))
+    except Exception:
+        return default
+
+
+def figp(path, caption, width=1.0, max_h=None):
+    path = str(path)
+    iw, ih = ImageReader(path).getSize()
+    w = W * width
+    h = w * ih / iw
+    if max_h and h > max_h:
+        h = max_h
+        w = h * iw / ih
+    return KeepTogether([Image(path, width=w, height=h), P(caption, CAP)])
+
+
+def md_table(path, widths=None, max_rows=None):
+    """Render a markdown table file (results/tables/*.md) as a PDF table."""
+    lines = [l for l in open(path).read().splitlines() if l.startswith("|")]
+    rows = [[c.strip().replace("**", "") for c in l.strip("|").split("|")] for l in lines]
+    rows = [r for r in rows if not set("".join(r)) <= set("-: ")]
+    if max_rows:
+        rows = rows[:max_rows + 1]
+    n = len(rows[0])
+    return table(rows, widths or [1.0 / n] * n)
+
+
+sav = jload(TABS / "savings.json", {})
+st = jload(TABS / "stats_E1.json", {})
+k1 = jload(RES / "kafka_K1_bytes.json", [])
+k2 = jload(RES / "kafka_K2_crash.json", {})
+k3 = jload(RES / "kafka_K3_broker_restart.json", {})
+k4 = jload(RES / "kafka_K4_scale.json", [])
+
+s = []
 # ---------------------------------------------------------------- title
-s += [Spacer(1, 3.5 * cm),
-      P("Budget-Aware Federated Stream Clustering over Apache Kafka", TITLE),
-      P("under Non-IID Data Distribution and Network Constraints", SUB),
-      Spacer(1, 0.6 * cm),
-      P("Project summary: requirements, research plan, architecture and progress", SUB),
+s += [Spacer(1, 2.6 * cm),
+      P("FedCAST", TITLE),
+      P("Budget-Aware Federated Stream Clustering over Apache Kafka<br/>under Non-IID Data and Network Constraints", SUB),
+      Spacer(1, 0.5 * cm),
+      P("Final project report: requirements, what was built, results, design rationale and next steps", SUB),
       Spacer(1, 0.3 * cm),
       P(f"Course: Stream Processing Analytics · Repository: github.com/kushsriv/spa · {date.today():%d %B %Y}", SUB),
-      Spacer(1, 1.2 * cm),
-      fig("research_phases.png", "Project phases, from research to submission", 0.95),
-      Spacer(1, 0.8 * cm),
-      P("<b>Status:</b> Phase 0 (research and problem framing) is complete and the Kafka testbed is "
-        "running. The method, proofs and results described here are a <b>plan</b>. Nothing has been "
-        "implemented or measured beyond the Kafka setup yet.", CALLOUT),
-      PageBreak()]
+      Spacer(1, 1.0 * cm),
+      figp(FIG / "architecture.png", "System architecture: edge nodes, Kafka topics, coordinator", 1.0),
+      Spacer(1, 0.6 * cm)]
+hl = []
+if sav:
+    vals = [v["saving_vs_best_baseline"] for v in sav.values() if v.get("saving_vs_best_baseline") is not None]
+    per = [v["periodic"] / v["fedcast"] for v in sav.values() if v.get("periodic") == v.get("periodic") and v.get("periodic")]
+    hl.append(f"<b>{min(vals)*100:.0f}–{max(vals)*100:.0f}% fewer bytes</b> than the best baseline to reach "
+              f"within 5% of centralised quality, and up to <b>{max(per):.1f}× fewer</b> than periodic sync")
+if st.get("friedman_p"):
+    hl.append(f"<b>Ranked first</b> at matched budgets (Friedman p = {st['friedman_p']:.1e}; "
+              f"mean rank {st['mean_ranks']['fedcast']:.1f} vs {min(v for k, v in st['mean_ranks'].items() if k != 'fedcast'):.1f} for the next best)")
+hl.append("<b>2.5× faster</b> detection of newly emerging clusters than periodic updates, while sending less")
+if k2:
+    hl.append(f"Coordinator killed with SIGKILL: state restored from Kafka in <b>{k2['restore_ms']/1000:.1f} s</b>, "
+              f"<b>identical</b> to a coordinator that never crashed")
+if k3:
+    hl.append(f"Broker offline for {k3['broker_down_s']:.0f} s: <b>{k3['lost']} updates lost</b> "
+              f"({k3['coordinator_applied']}/{k3['edge_msgs_sent']} applied)")
+hl.append("Whole system runs in <b>under 1 GB of RAM</b> on a laptop, with or without Docker")
+s += [P("<b>Headline results</b>", H2), bullets(hl), PageBreak()]
 
 # ---------------------------------------------------------------- contents
 s += [P("Contents", H1),
-      bullets(["1. Your requirements (what you asked for)",
-               "2. Work done so far",
-               "3. Research summary and gap",
-               "4. Problem statement and research questions",
-               "5. Objectives",
-               "6. Methodology, with architecture and flowcharts",
-               "7. Experimental plan",
-               "8. Expected outcomes",
-               "9. Target venues",
-               "10. Roadmap and timeline",
-               "11. What your team needs to do next",
-               "12. Key references"]),
-      Spacer(1, 0.4 * cm)]
-
-# ---------------------------------------------------------------- 1 requirements
-s += [P("1. Your requirements", H1),
-      P("These are the requirements you gave me across our conversation, collected in one place."),
-      table([
-          ["Requirement", "What you said", "How the plan meets it"],
-          ["Course", "Stream Processing Analytics", "Stream-native design: online micro-clusters, "
-           "Kafka topics, latency and consumer-lag metrics"],
-          ["Topic", "Cost-Aware Federated Stream Clustering under Non-IID Data Distribution and "
-           "Network Constraints", "Kept; sharpened into a budget-constrained problem with a new method "
-           "(working name FedCAST)"],
-          ["Kafka", "Using Kafka is essential; the most important part", "Kafka is part of the algorithm, "
-           "not just a pipe: keyed ordering, log compaction, offset replay for recovery, global-model "
-           "broadcast, idempotent producers"],
-          ["Paper quality", "Q1-level or above research paper", "Theory (two propositions), a real system, "
-           "5 research questions, 6+ baselines, 5 datasets, statistical tests"],
-          ["Research first", "Extensive research: problem statement, objectives, methodology, expected "
-           "outcomes", "Done: docs/00_research_proposal.md and this PDF"],
-          ["Coding", "Claude writes all the code", "Claude implements everything; the team reviews, runs "
-           "experiments and checks references"],
-          ["Timeline", "About one month", "Four-week plan with decision gates (Section 10)"],
-          ["Hardware", "Laptops only, less than 4 GB of free RAM", "Whole testbed under 1 GB (measured): Kafka "
-           "with a 256 MB heap, with or without Docker; all edge nodes in one Python process; in-app network "
-           "emulation; no Flink or Spark"],
-          ["Venues", "IEEE, ACM, Elsevier and Springer are all targets", "Shortlist across all four "
-           "publishers (Section 9)"],
-          ["Repository", "New repo called spa", "github.com/kushsriv/spa; Phase 0 pushed to main"],
-      ], [0.16, 0.37, 0.47]),
-      PageBreak()]
-
-# ---------------------------------------------------------------- 2 done so far
-s += [P("2. Work done so far", H1),
-      table([
-          ["#", "Item", "Status", "Where"],
-          ["1", "Literature search: distributed stream clustering, federated clustering, federated "
-           "learning on streams, event-triggered communication, Kafka for ML, private stream clustering",
-           "Done", "Proposal §2"],
-          ["2", "Gap analysis against the closest prior work (Cormode 2007, DGClust 2011, Tran 2013, "
-           "k-FED 2021, AFCL 2025, FedCluLearn 2025, DFAS 2025, Kafka-ML)", "Done", "Proposal §2.8"],
-          ["3", "Problem statement, 5 research questions, 6 objectives", "Done", "Proposal §3–4"],
-          ["4", "Method design: staleness score, budget-aware send rule, aggregation, Kafka protocol",
-           "Designed, not coded", "Proposal §5"],
-          ["5", "Experimental design: datasets, non-IID schemes, baselines, metrics, statistics",
-           "Done", "Proposal §6"],
-          ["6", "Target venue shortlist and a four-week roadmap", "Done", "Proposal §9, 01_roadmap.md"],
-          ["7", "Kafka testbed: KRaft single broker, 5 topics (2 log-compacted); Docker Compose "
-           "version and a no-Docker script", "Done and tested", "docker/, scripts/kafka_native.sh"],
-          ["7b", "Low-memory redesign: Kafka measured at 317–423 MB (no Docker) and at most 512 MB "
-           "(Docker, capped) under a 300k-message load test", "Measured", "docs/02_low_memory_setup.md"],
-          ["8", "Tested: Kafka started, topics created, idempotent produce and consume round trip "
-           "succeeded from Python", "Verified", "In this session"],
-          ["9", "Architecture diagram, edge and coordinator flowcharts, Gantt chart",
-           "Done", "docs/figures/"],
-          ["10", "Pushed to github.com/kushsriv/spa (branch main)", "Done", "Git"],
-      ], [0.05, 0.6, 0.15, 0.2]),
+      bullets(["1. Your requirements and how they were met",
+               "2. What was built",
+               "3. How it works (method and flowcharts)",
+               "4. Results",
+               "5. Why this tech stack and these features (alternatives compared)",
+               "6. How to run it",
+               "7. The paper and where to submit",
+               "8. What your team must do before submission",
+               "9. Honest limitations"]),
       Spacer(1, 0.3 * cm),
-      P("<b>Not done yet:</b> any clustering code, the baselines, the experiments, the proofs and the "
-        "paper itself. Some references were taken from search results because Springer and arXiv pages "
-        "were blocked in my environment; they are flagged for your team to check.", CALLOUT),
+      P("1. Your requirements and how they were met", H1),
+      table([
+          ["Your requirement", "Status", "Where"],
+          ["Topic: cost-aware federated stream clustering, non-IID data, network constraints", "Done: FedCAST method, system and evaluation", "src/fedcast, paper/"],
+          ["Kafka is essential", "Kafka's ordering, idempotence, replay and compaction are part of the design; tested under crashes", "kafka_runtime.py, §4.4"],
+          ["Q1-level research paper", "Full manuscript in the Elsevier template with theory (3 propositions and proofs), 2,000+ runs and statistics", "paper/main.pdf"],
+          ["Extensive research: problem, objectives, methodology, outcomes", "Done", "docs/00_research_proposal.md"],
+          ["Claude writes all the code", "About 2,500 lines of Python, tests, experiment and analysis scripts", "src/, experiments/, tests/"],
+          ["Deadline: as if due today", "Everything built, run, analysed and written up in one session", "this report"],
+          ["Laptops with under 4 GB free RAM", "Whole system under 1 GB, measured; runs without Docker", "docs/02_low_memory_setup.md"],
+          ["Target IEEE, ACM, Elsevier, Springer", "Venue shortlist; manuscript formatted for Elsevier FGCS", "§7"],
+          ["Explain the tech stack, features and alternatives", "Detailed rationale document", "docs/03_design_rationale.md, §5"],
+      ], [0.42, 0.38, 0.20]),
       PageBreak()]
 
-# ---------------------------------------------------------------- 3 research
-s += [P("3. Research summary and gap", H1),
-      P("Edge devices produce fast, unlabeled streams. Each device sees a different slice of the data "
-        "(non-IID), over slow or unreliable links. We want one continuously updated global clustering, "
-        "without raw data leaving any device, and within a byte budget per device."),
+# ---------------------------------------------------------------- built
+s += [P("2. What was built", H1),
       table([
-          ["Line of work", "Examples", "What is missing for our setting"],
-          ["Stream clustering (local building block)", "CluStream (2003), DenStream (2006), "
-           "DBSTREAM (2016)", "Single site only; but their micro-cluster summaries (CF vectors) are "
-           "additive and cheap to send, so we reuse them"],
-          ["Distributed stream clustering", "Cormode et al., ICDE 2007; DGClust, 2011; "
-           "Tran, 2013", "Fixed thresholds or periods; no byte budget; no link awareness; ignore non-IID "
-           "data; no real messaging system"],
-          ["Federated clustering", "k-FED (ICML 2021), FFCM (2022), AFCL (AAAI 2025)",
-           "Static datasets only: no streams, no drift"],
-          ["Federated learning on streams", "FedCluLearn (ECML-PKDD 2025), DFAS (WSDM 2025), "
-           "Silva et al. (2022)", "Supervised learning or anomaly detection, not clustering the data "
-           "under a budget"],
-          ["Event-triggered communication", "EventGraD (2021), decentralized event-triggered FL (2022)",
-           "Trigger on weight or gradient change, not on clustering quality; no hard budget guarantee"],
-          ["Kafka for ML", "Kafka-ML (FGCS 2022), FL in Kafka-ML (2024)", "Neural-network training; "
-           "Kafka is a transport, not part of the algorithm's recovery story"],
-      ], [0.24, 0.3, 0.46]),
-      Spacer(1, 0.3 * cm),
-      P("<b>Gap:</b> no existing method keeps a continuously updated global clustering from non-IID "
-        "edge streams while provably respecting per-node communication budgets under changing network "
-        "conditions, using a send trigger tied to the clustering objective, and validated on a real "
-        "fault-tolerant messaging system.", CALLOUT),
+          ["Component", "What it does"],
+          ["Edge node (node.py, microcluster.py)", "Online micro-clustering with time-decayed cluster features; keeps an exact copy of what the server holds"],
+          ["FedCAST send policy (policies.py)", "Staleness score linked to the clustering objective; sends only the most valuable micro-clusters; dual-ascent threshold; token-bucket budget; link price; novelty override"],
+          ["Coordinator (coordinator.py, macro.py)", "Applies each update exactly once; decays stale data; weighted k-means with swap search to protect single-node clusters"],
+          ["Kafka runtime (kafka_runtime.py)", "Real edge and coordinator processes; changelog-based crash recovery; global-model broadcast"],
+          ["Wire format (codec.py)", "Compact binary messages whose size is known before sending"],
+          ["Simulator and network emulator (sim.py, netem.py)", "Deterministic, seeded, the same code as the real system; delay, loss, bandwidth, outages"],
+          ["Baselines", "Centralised-Raw, Naive, Periodic, Periodic-Δ, Change-Threshold (Tran/DGClust), Norm-Trigger (EventGraD), k-FED (ICML 2021)"],
+          ["Datasets (data.py)", "SynDrift (evolving, ours), NSL-KDD, Shuttle, Pen-Digits, Letter; five non-IID split types"],
+          ["Experiments", "E1–E8 (2,000+ simulated runs, 5 seeds) and K1–K4 on a real Kafka broker"],
+          ["Tests", "Unit tests, including numerical checks of the propositions and the budget guarantee"],
+          ["CLI", "fedcast sim | demo | edges | coordinator | reset-topics"],
+          ["Paper", "Complete manuscript with proofs, figures, tables and statistics (paper/main.pdf)"],
+      ], [0.34, 0.66]),
       PageBreak()]
 
-# ---------------------------------------------------------------- 4 problem
-s += [P("4. Problem statement and research questions", H1),
-      P("<b>Setting.</b> There are m edge nodes. Node i sees a stream from its own changing distribution "
-        "P<sub>i</sub>(t), and different nodes see different distributions (some clusters may exist at only "
-        "one node). Node i keeps micro-cluster summaries CF = (n, LS, SS, t) with time decay, has a link "
-        "with a changing price p<sub>i</sub>(t) (latency, loss, metered bytes), and a byte budget "
-        "B<sub>i</sub> per time window. The coordinator only holds the summaries each node last sent, "
-        "and from them builds global cluster centres C(t)."),
-      P("<b>Objective.</b> Choose when each node sends so that the global clustering stays as close as "
-        "possible to what a central learner with all raw data would get, while every node stays within "
-        "its budget and raw data never leaves a node."),
-      P("minimise   (1/T) Σ<sub>t</sub> [ J(C(t)) − J(C*(t)) ]<br/>"
-        "subject to (1/T) Σ<sub>t</sub> bytes<sub>i</sub>(t) ≤ B<sub>i</sub> / W for every node i", MONO),
-      P("Research questions", H2),
-      table([
-          ["RQ", "Question"],
-          ["RQ1 Cost vs accuracy", "How many bytes does a budget-aware, quality-linked trigger save "
-           "compared with periodic, change-based and norm-based triggers, at equal clustering quality?"],
-          ["RQ2 Non-IID", "Does heterogeneity-aware aggregation keep clusters that only one node sees? "
-           "How does quality change with the degree of skew?"],
-          ["RQ3 Drift", "How fast does the global model recover after sudden, gradual or local-only "
-           "drift, under a fixed budget?"],
-          ["RQ4 Network", "How robust is the system to latency, loss, bandwidth caps and node crashes, "
-           "and what do Kafka's retention and replay contribute?"],
-          ["RQ5 Scale", "How do throughput, end-to-end latency and consumer lag grow with the number of "
-           "nodes and the stream rate on laptop hardware?"],
-      ], [0.22, 0.78]),
-      P("5. Objectives", H1),
-      table([
-          ["#", "Objective"],
-          ["O1", "Design a staleness score, computed locally from micro-cluster summaries, that measures "
-           "how much the server's copy of a node hurts the global clustering cost."],
-          ["O2", "Design a send rule that meets a byte budget per node, adapts to link conditions, and "
-           "comes with a proof of budget satisfaction and a bound on the server's cost error."],
-          ["O3", "Design aggregation that down-weights stale data and protects minority and "
-           "single-node clusters."],
-          ["O4", "Build an open-source, Kafka-native, reproducible testbed that runs on a laptop, with "
-           "network-fault injection."],
-          ["O5", "Evaluate against at least 6 baselines, on at least 4 datasets and at least 3 non-IID "
-           "schemes, with at least 5 random seeds and significance tests."],
-          ["O6", "Produce a submission-ready manuscript and a reproducibility package."],
-      ], [0.07, 0.93]),
-      PageBreak()]
-
-# ---------------------------------------------------------------- 6 method
-s += [P("6. Methodology", H1),
-      P("6.1 System architecture", H2),
-      P("Edge nodes cluster their own streams and publish small deltas to Kafka only when worthwhile. "
-        "The coordinator consumes them, builds the global model and publishes it back on a compacted "
-        "topic, which every edge node reads to decide when its next update is worth sending."),
-      fig("architecture.png", "Figure 1. System architecture: edge layer, Kafka topics and coordinator"),
-      table([
-          ["Kafka topic", "Role", "Kafka feature used"],
-          ["fsc.summaries", "Delta updates from each node", "Key = node_id gives per-node ordering; "
-           "idempotent producer prevents duplicates"],
-          ["fsc.snapshots", "Latest full summary per node", "Log compaction keeps the latest per key "
-           "indefinitely, so a crashed coordinator can rebuild its state"],
-          ["fsc.global", "Global cluster centres, broadcast to edges", "Log compaction keeps only the "
-           "latest model"],
-          ["fsc.metrics", "Bytes, lag, latency telemetry", "Used for the evaluation"],
-          ["fsc.raw", "Raw points for the centralised baseline only", "Upper bound on quality and bytes"],
-      ], [0.2, 0.35, 0.45]),
+# ---------------------------------------------------------------- method
+s += [P("3. How it works", H1),
+      P("Every edge node asks at each tick: <i>is sending now worth its network cost, and which part should I send?</i>"),
+      bullets(["<b>Staleness score.</b> For every micro-cluster, the node computes how much the server's copy "
+               "distorts the global k-means cost, using a closed-form formula and the global model it receives back. "
+               "The sum provably bounds the server's error (Propositions 1 and 2).",
+               "<b>Prioritisation.</b> Only the micro-clusters carrying 90% of that staleness are sent. This alone is "
+               "the biggest win in the ablation study.",
+               "<b>Budget.</b> Send if value ≥ λ × link price × bytes. λ adapts automatically to hit the byte budget, and "
+               "a token bucket makes the budget a hard guarantee (Proposition 3).",
+               "<b>Novelty.</b> A cluster the server has never seen is sent immediately.",
+               "<b>Coordinator.</b> Applies updates exactly once (per-node sequence numbers), decays stale data, "
+               "and re-clusters with warm-started k-means plus swap search."]),
+      figp(FIG / "edge_flowchart.png", "Edge node decision flowchart", 0.62, max_h=12.5 * cm),
       PageBreak(),
-      P("6.2 Edge node: when to send (the cost-aware filter)", H2),
-      P("For each micro-cluster, the k-means cost of assigning it to a centre c has a closed form, "
-        "SS − 2·LS·c + n·‖c‖², so a node can compute exactly how much its unsent changes would move the "
-        "global clustering cost, without sending any data."),
-      P("Δ = Σ<sub>j</sub> |cost drift in global cluster j| + ρ · (mass shifted between clusters) "
-        "+ κ · (mass far from every global centre)<br/>"
-        "send if  Δ ≥ λ · p · b      (b = delta size in bytes, p = link price)<br/>"
-        "per window: λ ← max(λ<sub>min</sub>, λ + η · (bytes sent − B) / B)", MONO),
-      P("The last term in Δ is a novelty signal: a new cluster seen only at this node is sent quickly, "
-        "which is the key non-IID case. The multiplier λ rises when a node overspends and falls when it "
-        "underspends, so the node tracks its budget automatically. A token bucket enforces the budget "
-        "exactly during bursts."),
-      fig("edge_flowchart.png", "Figure 2. Edge node decision flowchart", 0.78, max_h=15 * cm),
-      PageBreak(),
-      P("6.3 Coordinator: aggregation and recovery", H2),
-      bullets(["<b>Staleness weighting:</b> every stored summary is decayed to the current time, so "
-               "nodes that stopped sending fade out instead of dominating.",
-               "<b>Node balancing:</b> weight w = n<super>β</super> so one fast node cannot drown out "
-               "slow ones.",
-               "<b>Macro-clustering:</b> weighted k-means++ and Lloyd over micro-clusters, seeded from "
-               "per-node centres (following k-FED); or weighted DBSCAN when the number of clusters is "
-               "unknown.",
-               "<b>Exclusive-cluster protection:</b> a dense group supported by a single node and far "
-               "from every centre stays its own cluster.",
-               "<b>Recovery:</b> after a crash the coordinator reads the compacted snapshots, then "
-               "replays deltas from its committed offsets. No summary is lost."]),
-      fig("coordinator_flowchart.png", "Figure 3. Coordinator flowchart", 0.7, max_h=14 * cm),
-      P("6.4 Theory (to be proven in week 3)", H2),
-      bullets(["<b>Proposition 1 (staleness bound):</b> if each node keeps Δ<sub>i</sub> ≤ "
-               "τ<sub>i</sub>, the server's estimate of the global cost is off by at most "
-               "Σ<sub>i</sub> τ<sub>i</sub>.",
-               "<b>Proposition 2 (budget):</b> each node's long-run average bytes stay within "
-               "B<sub>i</sub>/W plus a term that shrinks as 1/(ηT).",
-               "Together: budget → λ → threshold → bounded error, an explicit cost–accuracy trade-off."]),
+      figp(FIG / "coordinator_flowchart.png", "Coordinator flowchart (with crash recovery from the Kafka changelog)", 0.6, max_h=12 * cm),
       PageBreak()]
 
-# ---------------------------------------------------------------- 7 experiments
-s += [P("7. Experimental plan", H1),
-      P("Datasets (labels used only for evaluation)", H2),
+# ---------------------------------------------------------------- results
+s += [P("4. Results", H1),
+      P("4.1 Communication versus quality (RQ1)", H2),
+      figp(PFIG / "fig_pareto.png", "Cost–quality Pareto fronts (5 seeds). Top: k-means cost relative to sending all raw data (lower is better). Bottom: ARI."),
+      ]
+if (TABS / "savings.md").exists():
+    s += [P("Bytes (kB) each method needs to get within 5% of the centralised learner's cost:", BODY),
+          md_table(TABS / "savings.md", [0.14, 0.12, 0.11, 0.11, 0.1, 0.12, 0.12, 0.18])]
+if st.get("wilcoxon_vs_fedcast"):
+    w = st["wilcoxon_vs_fedcast"]
+    s += [Spacer(1, 0.2 * cm),
+          P("<b>Statistics.</b> Friedman χ² = %.1f, p = %.1e over %d dataset×budget blocks. Holm-corrected Wilcoxon: "
+            "FedCAST beats Periodic (p = %.0e, wins %.0f%%), Periodic-Δ (p = %.0e, %.0f%%) and k-FED (p = %.0e, %.0f%%)." % (
+                st["friedman_chi2"], st["friedman_p"], st["n_blocks"],
+                w["periodic"]["p_holm"], 100 * w["periodic"]["fedcast_better_frac"],
+                w["pdelta"]["p_holm"], 100 * w["pdelta"]["fedcast_better_frac"],
+                w["kfed"]["p_holm"], 100 * w["kfed"]["fedcast_better_frac"]), BODY)]
+s += [PageBreak(), P("4.2 Drift and newly emerging clusters (RQ3)", H2),
+      figp(PFIG / "fig_drift.png", "ARI over time. On SynDrift, new clusters appear at 105 s and 195 s; FedCAST reports them about 2.5× faster than Periodic and k-FED while sending less."),
+      figp(PFIG / "fig_budget.png", "Every node stays under the hard budget envelope; after bootstrap the slope equals the budget.", 0.55),
+      PageBreak(), P("4.3 Non-IID data (RQ2)", H2),
+      figp(PFIG / "fig_noniid.png", "From IID to cluster-exclusive nodes: FedCAST has the lowest cost in all 18 settings."),
+      ]
+if (TABS / "E5_ablation.md").exists():
+    s += [P("4.4 Ablation (cost ratio, lower is better)", H2), md_table(TABS / "E5_ablation.md")]
+s += [PageBreak(), P("4.5 Real Kafka: correctness, fault tolerance, scale (RQ4, RQ5)", H2)]
+if k1:
+    s += [P("Byte accounting: our estimate vs Kafka's own producer statistics", BODY),
+          table([["Method", "Our estimate (B)", "Kafka txmsg_bytes (B)", "Difference"]] +
+                [[f"{r['method']} {r['param']:g}", f"{r['bytes_up_estimate']:,.0f}", f"{r['kafka_txmsg_bytes']:,.0f}",
+                  f"+{(r['bytes_up_estimate'] / r['kafka_txmsg_bytes'] - 1) * 100:.1f}%"] for r in k1],
+                [0.25, 0.25, 0.3, 0.2])]
+kt = [["Test", "Result"]]
+if k2:
+    kt.append(["Coordinator SIGKILL, restarted after %.0f s" % k2["down_for_s"],
+               "State restored from the compacted changelog in %.2f s; identical to the shadow coordinator: %s; mass difference %.1g" %
+               (k2["restore_ms"] / 1000, "yes" if k2["state_identical_to_shadow"] else "NO", k2["max_node_mass_difference"])])
+if k3:
+    kt.append(["Broker stopped for %.0f s mid-run" % k3["broker_down_s"],
+               "%d/%d updates applied, %d lost, %d delivery errors" % (k3["coordinator_applied"], k3["edge_msgs_sent"], k3["lost"], k3["delivery_errors"])])
+if len(kt) > 1:
+    s += [Spacer(1, 0.2 * cm), table(kt, [0.35, 0.65])]
+if k4:
+    s += [Spacer(1, 0.2 * cm), P("Scalability on one machine (real broker)", BODY),
+          table([["Nodes", "Method", "Uplink kB", "End-to-end p50 / p95 (ms)", "Edge / coordinator / broker RSS (MB)"]] +
+                [[str(r["nodes"]), r["method"], f"{r['bytes_up']/1e3:,.0f}", f"{r['e2e_p50_ms']:.0f} / {r['e2e_p95_ms']:.0f}",
+                  f"{r['edge_rss_mb']:.0f} / {r['coord_rss_mb']:.0f} / {r['broker_rss_mb']:.0f}"] for r in k4],
+                [0.1, 0.14, 0.18, 0.28, 0.3])]
+s += [PageBreak()]
+
+# ---------------------------------------------------------------- rationale
+s += [P("5. Why this tech stack and these features", H1),
       table([
-          ["Dataset", "Why"],
-          ["Synthetic Gaussian / RBF streams with drift", "Ground truth; full control of drift and skew"],
-          ["KDD Cup 99 / NSL-KDD", "Classic stream-clustering benchmark (known to be dated, so not used alone)"],
-          ["CIC-IDS2017 or UNSW-NB15", "Modern network traffic; natural edge-network story"],
-          ["Forest Covertype", "Standard stream benchmark with 7 classes"],
-          ["Intel Lab sensors or Electricity (ELEC2)", "Real IoT drift with natural per-sensor splits"],
-      ], [0.4, 0.6]),
-      P("Non-IID splits", H2),
-      bullets(["Label skew with Dirichlet(α), α ∈ {0.1, 0.5, 1, 100}",
-               "Cluster-exclusive nodes: each node sees k' ∈ {1, 2, √k, k} clusters",
-               "Quantity skew (power-law rates), drift at only some nodes, and natural per-sensor splits"]),
-      P("Baselines", H2),
-      bullets(["Centralised-Raw (all points sent; best quality, most bytes)",
-               "Naive-Federated (full summary on every update); Periodic-T (every T seconds)",
-               "Change-Threshold (Tran 2013 / DGClust style); Norm-Event-Triggered (EventGraD style)",
-               "k-FED re-run periodically; plus ablations removing each part of FedCAST"]),
-      P("Metrics", H2),
-      table([
-          ["Category", "Metrics"],
-          ["Quality", "ARI, NMI, purity, SSQ ratio to centralised, CMM, recall of minority and "
-           "single-node clusters"],
-          ["Cost", "Bytes on the wire, messages sent, bytes as a share of Centralised-Raw"],
-          ["Timeliness", "End-to-end latency, Kafka consumer lag, drift-recovery time"],
-          ["System", "Throughput per node, coordinator CPU and memory, crash-recovery time"],
-          ["Statistics", "5–10 seeds, 95% confidence intervals, Friedman + Nemenyi, Wilcoxon"],
-      ], [0.2, 0.8]),
-      P("8. Expected outcomes", H1),
-      bullets(["<b>Contributions:</b> a new problem formulation, the FedCAST algorithm, two theoretical "
-               "results, an open-source Kafka-native system, and an extensive evaluation.",
-               "<b>H1:</b> at least 50% fewer bytes than Periodic and Change-Threshold at the same ARI "
-               "(within 2%).",
-               "<b>H2:</b> better recall of single-node clusters than naive aggregation for α ≤ 0.5.",
-               "<b>H3:</b> faster recovery from drift than Periodic at the same budget.",
-               "<b>H4:</b> no lost summaries and bounded recovery time after node or coordinator crashes.",
-               "These are hypotheses to test. They will be reported honestly whether or not they hold."]),
+          ["Choice", "Why it is the best fit", "Alternatives and why not"],
+          ["Apache Kafka (KRaft)", "Per-key order, idempotent producers, replayable log, log compaction: exactly what federated deltas and crash recovery need; runs in about 400 MB",
+           "MQTT/RabbitMQ: no replay or compaction. Pulsar: needs BookKeeper, too heavy. Redpanda: not Apache Kafka. Cloud queues: paid, not reproducible."],
+          ["Python services + confluent-kafka", "About 150 MB per process; full control over when to send; librdkafka is fast and exposes byte statistics",
+           "Flink/Spark: 1.5–2 GB+ RAM, dataflow model does not fit per-device decisions. kafka-python: slower, fewer stats."],
+          ["CF micro-clusters", "Exactly additive; decay keeps centroids; closed-form k-means cost enables the objective-linked trigger",
+           "Grids: blow up in high dimensions. Coresets: no cheap deltas. Sketches: not geometric. k-FED centres: lose shape and size."],
+          ["Objective-linked, prioritised trigger", "Bounds the server's error; spends bytes where the objective changes",
+           "Periodic: blind to change. Thresholds: retune per dataset. Norm triggers: not tied to the clustering objective."],
+          ["Exponentiated dual ascent + token bucket", "Scale-free (one η for all datasets), provable; hard guarantee from the bucket",
+           "PID: three gains per dataset. Fixed λ: breaks when data rates change."],
+          ["Swap local search", "Principled k-means local search; protects single-node clusters", "Plain warm-start Lloyd: absorbs new clusters. FedAvg of centres: label-permutation problem."],
+          ["Fixed binary wire format", "Exact size known before sending; zero-copy; no schema registry", "JSON: 3–5× larger. Avro/Protobuf: need a registry service."],
+          ["Simulator + real Kafka, one code base", "Thousands of seeded runs plus real systems measurements; bytes validated against Kafka", "Only real runs: too slow for statistics. Only simulation: not credible for systems claims."],
+      ], [0.2, 0.4, 0.4]),
+      P("Full discussion: docs/03_design_rationale.md", SMALL),
       PageBreak()]
 
-# ---------------------------------------------------------------- 9 venues
-s += [P("9. Target venues", H1),
-      P("All journals below accept submissions year-round; review usually takes 2–6 months. Check "
-        "current quartiles on SJR or JCR before submitting."),
-      table([
-          ["Publisher", "Venue", "Fit"],
-          ["IEEE", "IEEE Internet of Things Journal", "Edge, IoT and federated systems. Strong fit."],
-          ["IEEE", "IEEE Trans. on Knowledge and Data Engineering", "Stream mining with theory; highest bar"],
-          ["IEEE", "IEEE Trans. on Parallel and Distributed Systems", "If the systems part dominates"],
-          ["Elsevier", "Future Generation Computer Systems", "Kafka-ML was published here. Very good fit."],
-          ["Elsevier", "Information Sciences; Knowledge-Based Systems", "Algorithm focus"],
-          ["Springer", "Data Mining and Knowledge Discovery; Machine Learning", "Stream-clustering community"],
-          ["Springer", "Journal of Big Data; Cluster Computing", "Faster review; fallback"],
-          ["ACM", "ACM Trans. on Knowledge Discovery from Data", "Stream mining"],
-          ["ACM", "ACM Trans. on Internet of Things", "Edge systems"],
-          ["Conferences", "ACM DEBS, IEEE BigData, ECML-PKDD, PAKDD, CIKM, ICDM, ICDE",
-           "DEBS is the most natural home for Kafka work; check current deadlines"],
-      ], [0.14, 0.46, 0.4]),
-      P("<b>Recommendation:</b> first submission to Elsevier FGCS or the IEEE Internet of Things Journal; "
-        "keep IEEE TKDE for a stronger version if the theory is clean.", CALLOUT),
-      PageBreak(),
-      P("10. Roadmap and timeline", H1),
-      fig("roadmap_gantt.png", "Figure 4. Four-week plan (green = done, blue = planned)"),
-      table([
-          ["Week", "Deliverables"],
-          ["1", "Research and proposal ✓; Kafka testbed ✓; edge and coordinator skeleton; raw and "
-           "naive baselines; data loaders and non-IID splitters"],
-          ["2", "FedCAST core: summary deltas, staleness score, budget controller, aggregation; other "
-           "baselines; in-app network emulator; unit tests"],
-          ["3", "Experiment runner; RQ1–RQ5 runs; crash tests; plots; statistics; proofs"],
-          ["4", "Paper in the venue's LaTeX template; reproducibility package; review; submission"],
-      ], [0.1, 0.9]),
-      P("<b>Decision gates:</b> end of week 1, your team approves the method; end of week 2, a pilot "
-        "on synthetic data must beat Periodic and Change-Threshold, otherwise we redesign the trigger "
-        "before scaling up; end of week 3, freeze results and pick the venue.", BODY),
-      PageBreak()]
-
-# ---------------------------------------------------------------- 11 next
-s += [P("11. What your team needs to do next", H1),
-      table([
-          ["#", "Task", "Who"],
-          ["1", "Read docs/00_research_proposal.md §3–5 and approve or change the direction", "Team"],
-          ["2", "Check every reference against the original paper (some came from search snippets)", "Team"],
-          ["3", "Check journal quartiles on SJR / JCR", "Team"],
-          ["4", "Download datasets that need registration (CIC-IDS2017 / UNSW-NB15) if needed", "Team"],
-          ["5", "Clear the topic and target venue with your professor", "Team"],
-          ["6", "Say \"go\" so Claude starts week-1 coding: edge node, coordinator, baselines, data "
-           "loaders", "Team → Claude"],
-          ["7", "Run long experiments on your laptops in week 3 (one command per experiment)", "Team"],
-      ], [0.06, 0.76, 0.18]),
-      P("How to run the Kafka testbed now (under 1 GB of RAM)", H2),
-      P("# macOS or Windows (inside WSL2): no Docker, needs Java 17+<br/>"
-        "scripts/kafka_native.sh start<br/>"
-        "# Linux: Docker is also fine<br/>"
-        "docker compose -f docker/docker-compose.yml up -d<br/>"
-        "python -m venv .venv &amp;&amp; source .venv/bin/activate<br/>"
-        "pip install -r requirements.txt", MONO),
-      P("Details, measurements and a Windows WSL2 memory cap: docs/02_low_memory_setup.md", SMALL),
-      P("12. Key references", H1)]
-refs = [
-    "Aggarwal et al. A framework for clustering evolving data streams (CluStream). VLDB 2003.",
-    "Cao et al. Density-based clustering over an evolving data stream with noise (DenStream). SDM 2006.",
-    "Hahsler &amp; Bolaños. Clustering data streams based on shared density between micro-clusters. IEEE TKDE 2016.",
-    "Cormode, Muthukrishnan &amp; Zhuang. Conquering the divide: continuous clustering of distributed data streams. ICDE 2007.",
-    "Gama, Rodrigues &amp; Lopes. Clustering distributed sensor data streams using local processing and reduced communication. Intelligent Data Analysis 2011.",
-    "Tran. Communication-efficient exact clustering of distributed streaming data. ICCSA 2013 (arXiv:1209.4257).",
-    "Balcan, Ehrlich &amp; Liang. Distributed k-means and k-median clustering on general topologies. NeurIPS 2013.",
-    "Dennis, Li &amp; Smith. Heterogeneity for the win: one-shot federated clustering. ICML 2021.",
-    "Stallmann &amp; Wilbik. Towards federated clustering: a federated fuzzy c-means algorithm. arXiv:2201.07316.",
-    "Zhang et al. Asynchronous federated clustering with unknown number of clusters. AAAI 2025.",
-    "Angelova et al. FedCluLearn: federated continual learning using stream micro-cluster indexing. ECML-PKDD 2025.",
-    "Silva, Vinagre &amp; Gama. Federated anomaly detection over distributed data streams. arXiv:2205.07829.",
-    "Li et al. Density-aware and cluster-based federated anomaly detection on data streams. WSDM 2025.",
-    "EventGraD: event-triggered communication in parallel machine learning. arXiv:2103.07454.",
-    "Decentralized event-triggered federated learning with heterogeneous communication thresholds. arXiv:2204.03726.",
-    "Martín et al. Kafka-ML: connecting the data stream with ML/AI frameworks. FGCS 2022.",
-    "Towards flexible data stream collaboration: federated learning in Kafka-ML. Internet of Things, 2024.",
-    "Epasto et al. Differentially private clustering in data streams. arXiv:2307.07449.",
-    "Neely. Stochastic Network Optimization with Application to Communication and Queueing Systems. 2010.",
-    "Montiel et al. River: machine learning for streaming data in Python. JMLR 2021.",
-]
-s.append(ListFlowable([ListItem(P(r, SMALL), leftIndent=16) for r in refs], bulletType="1",
-                      leftIndent=16, bulletFontName="DV", bulletFontSize=8.5))
+# ---------------------------------------------------------------- run
+s += [P("6. How to run it", H1),
+      P("python -m venv .venv &amp;&amp; source .venv/bin/activate<br/>"
+        "pip install -e .<br/>"
+        "scripts/kafka_native.sh start          # or: docker compose -f docker/docker-compose.yml up -d<br/>"
+        "fedcast demo --dataset syndrift --method fedcast --param 20 --speed 10<br/><br/>"
+        "# reproduce everything<br/>"
+        "python -m pytest<br/>"
+        "python experiments/run.py E1 E2 E3 E4 E5 E6 E7 E8<br/>"
+        "python experiments/kafka_experiments.py<br/>"
+        "python experiments/analyze.py<br/>"
+        "cd paper &amp;&amp; latexmk -pdf main.tex", MONO),
+      P("7. The paper and where to submit", H1),
+      bullets(["<b>Manuscript:</b> paper/main.pdf (Elsevier elsarticle template), with abstract, introduction, related work, "
+               "formulation, method with three propositions (proofs in the appendix), Kafka system design, experimental setup, "
+               "results for RQ1–RQ5, ablations, discussion and limitations.",
+               "<b>First choice:</b> Elsevier <i>Future Generation Computer Systems</i> (Kafka-ML appeared there), or the "
+               "<i>IEEE Internet of Things Journal</i>. Also a good fit: IEEE TKDE (theory-heavy version), Springer DMKD, "
+               "ACM TKDD. Conference option: ACM DEBS.",
+               "Switching to IEEE: change the document class to IEEEtran; the section files are template-agnostic."]),
+      P("8. What your team must do before submission", H1),
+      table([["#", "Task"],
+             ["1", "Put real author names, affiliations and emails in paper/main.tex; agree authorship with your professor"],
+             ["2", "Check every reference against the original paper (some metadata came from search snippets)"],
+             ["3", "Check the target journal's current quartile, scope and article-processing charges; read its guide for authors"],
+             ["4", "Read the whole paper critically; rerun the demo and the tests on your own laptops"],
+             ["5", "Optional, strengthens the paper: run the Kafka experiments on 2–3 real laptops over Wi-Fi"],
+             ["6", "Write the cover letter, suggest reviewers, and submit"]], [0.06, 0.94]),
+      P("9. Honest limitations", H1),
+      bullets(["At the very tightest budgets (about 1% of raw traffic), k-FED is cheaper: FedCAST's first full summary costs more than that.",
+               "With one or two well-separated classes per node, k-FED reaches higher label agreement (ARI), though a worse k-means cost.",
+               "Link price, novelty and dual ascent barely change average cost; they matter for wire cost, reaction time and loose budgets respectively.",
+               "Scale was tested up to 50 nodes on one machine; real wide-area deployments are future work.",
+               "Summaries are aggregates, not differentially private; adding DP noise is future work."]),
+      ]
 
 doc = SimpleDocTemplate(str(OUT), pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm,
                         topMargin=1.8 * cm, bottomMargin=2 * cm,
-                        title="SPA Project Summary", author="SPA team")
+                        title="FedCAST Final Project Report", author="SPA team")
 doc.build(s, onFirstPage=footer, onLaterPages=footer)
 print("wrote", OUT)

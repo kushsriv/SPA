@@ -1,0 +1,98 @@
+{
+ "nslkdd|price=False|B=150|150": {
+  "kb": 516.8112,
+  "wire": 524.5916,
+  "ratio": 1.0334343499858971,
+  "metric": "bytes(bad links)/bytes(good links) 1.02"
+ },
+ "nslkdd|price=False|B=500|500": {
+  "kb": 1414.2168000000001,
+  "wire": 1445.9308,
+  "ratio": 1.0164918493120252,
+  "metric": "bytes(bad links)/bytes(good links) 1.04"
+ },
+ "nslkdd|price=True|B=150|150": {
+  "kb": 513.6036,
+  "wire": 522.4368,
+  "ratio": 1.0344666216041989,
+  "metric": "bytes(bad links)/bytes(good links) 1.01"
+ },
+ "nslkdd|price=True|B=500|500": {
+  "kb": 1370.7212,
+  "wire": 1397.3028,
+  "ratio": 1.0177645082408613,
+  "metric": "bytes(bad links)/bytes(good links) 0.99"
+ },
+ "pendigits|dual=False|500": {
+  "kb": 444.05359999999996,
+  "wire": 449.306,
+  "ratio": 0.9986511337963501,
+  "metric": "budget used 30%"
+ },
+ "pendigits|dual=True|500": {
+  "kb": 928.2748,
+  "wire": 943.4692,
+  "ratio": 0.998886103652341,
+  "metric": "budget used 62%"
+ },
+ "syndrift|dual=False|500": {
+  "kb": 533.6116,
+  "wire": 540.1132,
+  "ratio": 1.0065818149024348,
+  "metric": "budget used 36%"
+ },
+ "syndrift|dual=True|500": {
+  "kb": 1268.6771999999999,
+  "wire": 1290.7748000000001,
+  "ratio": 1.0037882321330207,
+  "metric": "budget used 85%"
+ },
+ "syndrift|novelty=False|10": {
+  "kb": 58.5984,
+  "wire": 60.3632,
+  "ratio": 1.0597481878154706,
+  "metric": "detection delay 10.9 \u00b1 5.6 s"
+ },
+ "syndrift|novelty=False|20": {
+  "kb": 86.7672,
+  "wire": 88.46839999999999,
+  "ratio": 1.034744274709416,
+  "metric": "detection delay 9.4 \u00b1 2.6 s"
+ },
+ "syndrift|novelty=True|10": {
+  "kb": 58.8008,
+  "wire": 60.6492,
+  "ratio": 1.0508627336559937,
+  "metric": "detection delay 10.9 \u00b1 5.6 s"
+ },
+ "syndrift|novelty=True|20": {
+  "kb": 87.272,
+  "wire": 88.78960000000001,
+  "ratio": 1.0346175331312697,
+  "metric": "detection delay 9.4 \u00b1 2.6 s"
+ },
+ "syndrift|price=False|B=150|150": {
+  "kb": 459.972,
+  "wire": 469.9196,
+  "ratio": 1.0053603990464013,
+  "metric": "bytes(bad links)/bytes(good links) 1.00"
+ },
+ "syndrift|price=False|B=500|500": {
+  "kb": 1320.5088,
+  "wire": 1350.48,
+  "ratio": 1.0037113027732807,
+  "metric": "bytes(bad links)/bytes(good links) 0.97"
+ },
+ "syndrift|price=True|B=150|150": {
+  "kb": 450.6304,
+  "wire": 459.968,
+  "ratio": 1.005653029844462,
+  "metric": "bytes(bad links)/bytes(good links) 0.97"
+ },
+ "syndrift|price=True|B=500|500": {
+  "kb": 1276.1951999999999,
+  "wire": 1304.994,
+  "ratio": 1.0037506914812833,
+  "metric": "bytes(bad links)/bytes(good links) 0.93"
+ }
+}

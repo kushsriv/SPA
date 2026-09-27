@@ -1,0 +1,81 @@
+\subsection{RQ4: Network heterogeneity, outages and failures}\label{sec:rq4}
+
+\paragraph{Heterogeneous links and outages} Table~\ref{tab:net} runs every method under three network scenarios: homogeneous WAN; heterogeneous LAN/WAN/cellular/poor links; and the same with 45\,s outages at three nodes. Kafka-style retries and buffering deliver every summary eventually, and the coordinator's staleness decay stops silent nodes from freezing stale mass. As a result, every method's quality is nearly unchanged across scenarios. FedCAST's cost ratio moves by at most 0.009 (SynDrift 1.015--1.017, NSL-KDD 1.071--1.080), and retransmissions add only 1--3\,\% wire bytes. The ordering between methods is the same as in RQ1.
+
+\begin{table}[t]
+\centering\small
+\caption{Cost ratio (uplink kB) under network scenarios; mean of 5 seeds.}\label{tab:net}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llrrr@{}}
+\toprule
+Data & Method & homog.\ WAN & hetero & hetero+outage\\
+\midrule
+\multirow{5}{*}{SynDrift} & \textbf{FedCAST} & \textbf{1.015} (87) & \textbf{1.016} (87) & \textbf{1.017} (85)\\
+ & Periodic-60 & 1.125 (127) & 1.125 (127) & 1.126 (127)\\
+ & Periodic-$\Delta$-60 & 1.126 (113) & 1.125 (113) & 1.126 (113)\\
+ & k-FED-60 & 1.127 (40) & 1.126 (40) & 1.127 (40)\\
+ & Change-Thr. & 1.040 (574) & 1.040 (574) & 1.041 (574)\\
+\midrule
+\multirow{5}{*}{NSL-KDD} & \textbf{FedCAST} & 1.071 (154) & 1.077 (156) & 1.080 (156)\\
+ & Periodic-60 & 1.048 (459) & 1.050 (459) & 1.058 (459)\\
+ & Periodic-$\Delta$-60 & 1.048 (379) & 1.048 (379) & 1.058 (379)\\
+ & k-FED-60 & 1.084 (49) & 1.085 (49) & 1.084 (49)\\
+ & Change-Thr. & \textbf{1.028} (969) & \textbf{1.027} (969) & \textbf{1.027} (969)\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{What the remaining components are for} Table~\ref{tab:targeted} tests the three components whose average-cost effect in Table~\ref{tab:ablation} was negligible, each on the metric it is designed for. (i) \emph{Link price.} Under loose budgets on heterogeneous links, the price shifts 4--7\,\% of the traffic away from cellular and poor links and saves 3\,\% of wire bytes at unchanged quality. At tight budgets (Table~\ref{tab:net}) it has no effect, because the token bucket, not the threshold, is the binding constraint. (ii) \emph{Dual ascent.} Under a loose budget it makes the spend track the budget (62--85\,\% used, against 30--36\,\% with $\lambda$ frozen at its initial value) without changing quality. This shows it is the mechanism that makes $B$, rather than an arbitrary $\lambda_0$, the operating knob. It also shows that beyond some budget, extra bytes buy nothing, which suggests a value floor as a refinement. (iii) \emph{Novelty override.} Detection delays are identical with and without it (10.9 and 9.4\,s). The objective-linked score alone already reacts to emerging clusters, because a new micro-cluster far from every centre carries a large cost term. The override is therefore a redundant safety net, and we keep it only for its small cost benefit at the tightest budget (1.051 against 1.060).
+
+\begin{table}[t]
+\centering\small
+\caption{Targeted ablations: each component on the metric it is designed for (mean of 5 seeds).}\label{tab:targeted}
+\setlength{\tabcolsep}{2pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{@{}llrl@{}}
+\toprule
+Component & Setting & on / off & target metric (on vs.\ off)\\
+\midrule
+Link price & Syn, 500\,B/s & 1276 / 1321 kB & bad/good-link bytes 0.93 vs 0.97\\
+ & KDD, 500\,B/s & 1371 / 1414 kB & bad/good-link bytes 0.99 vs 1.04\\
+Dual ascent & Syn, 500\,B/s & 1.004 / 1.007 & budget used 85\,\% vs 36\,\%\\
+ & Pen, 500\,B/s & 0.999 / 0.999 & budget used 62\,\% vs 30\,\%\\
+Novelty & Syn, 10\,B/s & 1.051 / 1.060 & detection 10.9\,s vs 10.9\,s\\
+ & Syn, 20\,B/s & 1.035 / 1.035 & detection 9.4\,s vs 9.4\,s\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+
+\paragraph{Coordinator crash (real Kafka)} We ran 10 edge nodes with FedCAST against two coordinators in different consumer groups: a \emph{shadow} that never fails and a \emph{victim} that we kill with SIGKILL after 15\,s (no clean shutdown, no final checkpoint) and restart 8\,s later. The restarted victim rebuilt all 10 node states from the compacted changelog in 1.08\,s, resumed \texttt{fsc.summaries} at the checkpointed offsets, and caught up within 0.5\,s. At the end of the run its state was \emph{identical} to the shadow's: the same micro-cluster identifiers for every node and a maximum node-mass difference of 0.0. All 238 summaries were applied exactly once, and no node resent anything.
+
+\paragraph{Broker outage (real Kafka)} We stopped the Kafka broker in the middle of a run for 34\,s. The idempotent producers buffered and retried, and after the restart all 231 summaries sent by the nodes were applied by the coordinator: zero lost, zero delivery errors.
+
+\begin{table}[t]
+\centering\small
+\caption{Byte accounting on a real broker: our per-message estimate (payload + 24\,B) against librdkafka's \texttt{txmsg\_bytes}.}\label{tab:k1}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Method & estimate (B) & Kafka (B) & difference\\
+\midrule
+FedCAST 20 B/s & 55{,}978 & 54{,}340 & $+3.0\,\%$\\
+FedCAST 150 B/s & 230{,}798 & 226{,}028 & $+2.1\,\%$\\
+Periodic 30\,s & 189{,}160 & 187{,}900 & $+0.7\,\%$\\
+Periodic-$\Delta$ 30\,s & 153{,}264 & 152{,}004 & $+0.8\,\%$\\
+k-FED 30\,s & 57{,}760 & 56{,}500 & $+2.2\,\%$\\
+Centralised-Raw & 2{,}486{,}473 & 2{,}450{,}275 & $+1.5\,\%$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{RQ5: Scalability and footprint}\label{sec:rq5}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_kafka_scale}
+\caption{Real Kafka, 5--50 nodes on one 4-core machine: end-to-end latency from produce to coordinator consumption (left) and total uplink bytes (right, log scale).}\label{fig:kscale}
+\end{figure}
+
+Figure~\ref{fig:kscale} scales the real deployment from 5 to 50 edge nodes, each with its own idempotent producer, streaming 60k points in 20\,s of wall time (about 1{,}900 points/s). FedCAST's end-to-end latency stays flat at 33--35\,ms (p50) and 57\,ms (p95) at every scale, because nodes send few and small messages. Centralised-Raw's latency is 4--5$\times$ higher (156--179\,ms p50, 283--393\,ms p95) while it ships 2.5--2.8\,MB, against 32--325\,kB for FedCAST. FedCAST's traffic grows linearly with the number of nodes (6.5\,kB per node for 200\,s of stream), as the per-node budget prescribes. Quality is unchanged (ARI 0.97--0.99). The simulated scaling experiment agrees: bytes per node are constant and ARI stays within 0.97--0.99 from 5 to 50 nodes (Periodic: 0.95--0.98). Memory stays small. At 50 nodes the edge process needs 172\,MB, the coordinator 141\,MB and the broker 475\,MB, 788\,MB in total, which confirms that the complete system runs on a commodity laptop.
+

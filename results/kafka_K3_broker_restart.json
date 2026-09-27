@@ -1,0 +1,8 @@
+{
+ "broker_down_s": 34.150612354278564,
+ "edge_msgs_sent": 231,
+ "delivery_errors": 0,
+ "coordinator_applied": 231,
+ "lost": 0,
+ "ari": 0.963904569303785
+}

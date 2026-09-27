@@ -1,0 +1,13 @@
+{
+ "applied": 0,
+ "duplicates_ignored": 0,
+ "restored_nodes": 0,
+ "restore_ms": 1.3117790222167969,
+ "catch_up_s": 0.5024280548095703,
+ "e2e_ms_p50": 156.8150520324707,
+ "e2e_ms_p95": 283.2293510437012,
+ "coord_rss_mb": 141.94921875,
+ "model_version": 44,
+ "state": {},
+ "state_mass": {}
+}

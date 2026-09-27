@@ -1,0 +1,37 @@
+\subsection{RQ2: Degree of statistical heterogeneity}\label{sec:rq2}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.9\textwidth]{fig_noniid}
+\caption{Quality as heterogeneity grows, from IID through Dirichlet label skew to cluster-exclusive nodes (Excl($k'$): each node holds $k'$ classes). FedCAST at 20\,B/s per node against Periodic-60, Periodic-$\Delta$-60 and k-FED-60 (similar or larger traffic), with two aggregator variants. Mean of 5 seeds.}\label{fig:noniid}
+\end{figure*}
+
+Figure~\ref{fig:noniid} varies the partition from IID to cluster-exclusive nodes. FedCAST attains the lowest cost ratio in all 18 combinations of dataset and partition: 1.008--1.065, against 1.047--1.126 for Periodic and Periodic-$\Delta$ and 1.067--1.281 for k-FED. Its quality does not degrade with heterogeneity. On SynDrift it even improves, from 1.019 (IID) to 1.008 (one class per node), because exclusive clusters produce concentrated, high-value deltas.
+
+\paragraph{Aggregator} Swap local search lowers the cost in 17 of 18 settings (e.g.\ Pen-Digits Dir(0.1): 1.016 against 1.037 without swaps). Node balancing ($\beta{=}0.5$) is neutral under mild skew but helps in the cluster-exclusive regime (Pen-Digits Excl(1): 1.011 against 1.029; Letter Excl(2): 1.027 against 1.038). There, a node with a large share of the traffic would otherwise pull several centres towards its own clusters.
+
+\paragraph{k-FED's regime} With one or two classes per node and the oracle $k'$, k-FED reaches the highest \emph{label} agreement (Pen-Digits Excl(1): ARI 0.66 against 0.52--0.57 for all other methods, including Centralised-Raw), consistent with its theory~\cite{dennis2021kfed}. Its k-means cost, however, is 22\,\% above the centralised learner. Each local centre equals a class mean, so k-FED recovers the class partition rather than the k-means optimum. When labels are the goal and each node holds few, well-separated classes, k-FED's one-centre-per-class summaries are an excellent choice. When the goal is a faithful global clustering objective, FedCAST is.
+
+\subsection{Ablations}\label{sec:ablation}
+
+\begin{table}[t]
+\centering\small
+\caption{Ablation of FedCAST components at 20\,B/s per node: cost ratio (lower is better, mean of 5 seeds) and mean uplink.}\label{tab:ablation}
+\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Variant & Syn & KDD & Shut. & Pen & Let. & kB\\
+\midrule
+\textbf{FedCAST} & \textbf{1.016} & \textbf{1.085} & 1.107 & 1.012 & 1.046 & 102\\
+w/o prioritisation ($\gamma{=}1$) & 1.333 & 1.132 & 1.331 & 1.035 & 1.061 & 87\\
+full summaries & 1.295 & 1.132 & 1.321 & 1.037 & 1.054 & 89\\
+w/o swap search & 1.019 & 1.101 & 1.218 & 1.026 & 1.057 & 102\\
+w/o dual ascent & 1.019 & 1.088 & 1.108 & 1.011 & 1.047 & 102\\
+w/o link price & 1.017 & 1.090 & \textbf{1.065} & 1.012 & \textbf{1.044} & 103\\
+w/o novelty & 1.017 & 1.090 & 1.092 & 1.012 & 1.047 & 102\\
+w/o server decay & 1.017 & 1.089 & 1.106 & \textbf{1.011} & 1.047 & 102\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:ablation} isolates each component at a fixed budget. \emph{Prioritised partial deltas are the single most important ingredient.} Sending all dirty micro-clusters ($\gamma{=}1$) or full summaries raises the cost by up to 32\,\% on SynDrift and 22\,\% on Shuttle. Under the same budget, large messages drain the token bucket, so sends become rare. Prioritisation spends the same bytes on the few micro-clusters that actually move the objective. Swap search is the second most important component (Shuttle: 1.107 against 1.218 without it). The remaining components leave the \emph{average} cost at this budget essentially unchanged, because their purpose lies elsewhere. The novelty override targets \emph{reaction time} to new clusters, the link price targets \emph{wire cost} on bad links, and dual ascent targets \emph{loose} budgets, where it prevents spending bytes on updates that carry no value. Section~\ref{sec:rq4} and Table~\ref{tab:targeted} evaluate these targeted effects. Removing the link price even lowers the cost slightly on Shuttle and Letter: the price deliberately shifts traffic away from expensive links at a small quality cost.

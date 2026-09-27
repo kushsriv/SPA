@@ -1,0 +1,41 @@
+{
+ "methods": [
+  "fedcast",
+  "periodic",
+  "pdelta",
+  "kfed"
+ ],
+ "n_blocks": 10,
+ "mean_ranks": {
+  "fedcast": 1.1,
+  "periodic": 3.6,
+  "pdelta": 2.8,
+  "kfed": 2.5
+ },
+ "friedman_chi2": 19.560000000000002,
+ "friedman_p": 0.00020937828737529863,
+ "nemenyi_cd": 1.4832128415481485,
+ "wilcoxon_vs_fedcast": {
+  "periodic": {
+   "n": 48,
+   "p": 1.1723955140041653e-13,
+   "fedcast_better_frac": 0.9583333333333334,
+   "median_ratio_improvement": 1.0612073967526796,
+   "p_holm": 3.517186542012496e-13
+  },
+  "pdelta": {
+   "n": 48,
+   "p": 2.6943780540023e-11,
+   "fedcast_better_frac": 0.9375,
+   "median_ratio_improvement": 1.055468674479691,
+   "p_holm": 5.3887561080046e-11
+  },
+  "kfed": {
+   "n": 50,
+   "p": 1.6911059219637536e-09,
+   "fedcast_better_frac": 0.88,
+   "median_ratio_improvement": 1.0285162781332124,
+   "p_holm": 1.6911059219637536e-09
+  }
+ }
+}

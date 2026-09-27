@@ -1,0 +1,62 @@
+[
+ {
+  "method": "fedcast",
+  "param": 20,
+  "bytes_up_estimate": 55978.0,
+  "kafka_txmsg_bytes": 54340.0,
+  "kafka_tx_bytes": 67254.0,
+  "msgs_up": 91,
+  "ari": 0.9777388079908138,
+  "delivery_errors": 0
+ },
+ {
+  "method": "fedcast",
+  "param": 150,
+  "bytes_up_estimate": 230798.0,
+  "kafka_txmsg_bytes": 226028.0,
+  "kafka_tx_bytes": 260544.0,
+  "msgs_up": 265,
+  "ari": 0.976855766319093,
+  "delivery_errors": 0
+ },
+ {
+  "method": "periodic",
+  "param": 30,
+  "bytes_up_estimate": 189160.0,
+  "kafka_txmsg_bytes": 187900.0,
+  "kafka_tx_bytes": 198288.0,
+  "msgs_up": 70,
+  "ari": 0.9607632012171593,
+  "delivery_errors": 0
+ },
+ {
+  "method": "pdelta",
+  "param": 30,
+  "bytes_up_estimate": 153264.0,
+  "kafka_txmsg_bytes": 152004.0,
+  "kafka_tx_bytes": 162366.0,
+  "msgs_up": 70,
+  "ari": 0.9593287611076229,
+  "delivery_errors": 0
+ },
+ {
+  "method": "kfed",
+  "param": 30,
+  "bytes_up_estimate": 57760.0,
+  "kafka_txmsg_bytes": 56500.0,
+  "kafka_tx_bytes": 66862.0,
+  "msgs_up": 70,
+  "ari": 0.9751908539260731,
+  "delivery_errors": 0
+ },
+ {
+  "method": "raw",
+  "param": 0,
+  "bytes_up_estimate": 2486473.0,
+  "kafka_txmsg_bytes": 2450275.0,
+  "kafka_tx_bytes": 2687612.0,
+  "msgs_up": 2011,
+  "ari": 0.9293242549866914,
+  "delivery_errors": 0
+ }
+]

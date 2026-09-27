@@ -1,5 +1,7 @@
 # Roadmap (4 weeks, laptops only)
 
+> **Status: completed ahead of schedule.** Everything below was built, run and written up in one session: code, 2,000+ simulated runs, real-Kafka experiments, and the paper (`paper/main.pdf`). What remains for the team is in the final report, `docs/Project_Summary.pdf`, §8.
+
 | Week | Goal | Deliverables | Owner |
 |---|---|---|---|
 | 1 | Research plus testbed | `00_research_proposal.md` ✅; Kafka KRaft testbed ✅ (under 1 GB of RAM, with or without Docker); edge → Kafka → coordinator skeleton with Centralised-Raw and Naive-Federated baselines; data loaders and non-IID partitioners | Claude codes, team reviews |

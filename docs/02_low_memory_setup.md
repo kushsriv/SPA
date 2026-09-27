@@ -10,8 +10,8 @@ Measured in a test environment with a 300,000-message load test (600-byte messag
 | Kafka broker, **no Docker** (`scripts/kafka_native.sh`, 256 MB heap) | 317 MB | 423 MB | About 67k messages/s |
 | Kafka broker in Docker (`mem_limit: 512m`, 256 MB heap) | 264 MB | 479 MB (capped at 512 MB) | About 79k messages/s; never killed for running out of memory |
 | Python process: producer and consumer | — | about 140 MB | All simulated edge nodes will share **one** Python process |
-| Coordinator (Python) | — | about 150 MB (estimate) | Will be measured once written |
-| **Total** | | **about 0.7–0.8 GB** | Kafka is far faster than we need: devices only send small summaries |
+| Coordinator (Python) | — | 141 MB (measured) | Same with 5 or 50 nodes |
+| **Total, 50 nodes, real run** | | **788 MB** (edges 172 + coordinator 141 + broker 475) | Measured in experiment K4 |
 
 ## Which option to use
 

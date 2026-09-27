@@ -88,6 +88,17 @@ def experiments(seeds: int):
     E["E7"] = [("syndrift", v(BASE, method=m, param=p, nodes=n, seed=s), None)
                for n in (5, 10, 20, 50) for m, p in [("fedcast", 20), ("periodic", 60), ("pdelta", 60), ("kfed", 60)]
                for s in range(min(seeds, 3))]
+    # E8 - targeted ablations: what novelty and dual ascent are *for*
+    #   novelty -> detection delay of emerging clusters (series kept)
+    #   dual ascent -> spending under a loose budget (bytes actually used)
+    E["E8"] = ([("syndrift", v(BASE, method="fedcast", param=B, seed=s, eval_period=5.0, eval_window=20.0,
+                              use_novelty=nov), f"novelty={nov}")
+                for B in (10, 20) for nov in (True, False) for s in S]
+               + [(ds, v(BASE, method="fedcast", param=500, seed=s, use_dual=dual), f"dual={dual}")
+                  for ds in ["syndrift", "pendigits"] for dual in (True, False) for s in S]
+               + [(ds, v(BASE, method="fedcast", param=B, seed=s, links=["lan", "wan", "cellular", "poor"],
+                         use_price=pr), f"price={pr}|B={B}")
+                  for ds in ["syndrift", "nslkdd"] for B in (150, 500) for pr in (True, False) for s in S])
     return E
 
 
@@ -128,7 +139,7 @@ def main():
         done = set()
         if out.exists():
             done = {json.loads(line)["key"] for line in out.open()}
-        keep = name in ("E3",)
+        keep = name in ("E3", "E8")
         jobs = [(ds, cfg, tag, keep) for ds, cfg, tag in E[name] if _key(ds, cfg, tag) not in done]
         # slow runs first for better load balancing
         jobs.sort(key=lambda j: (j[1].method != "raw", j[0] != "nslkdd"))

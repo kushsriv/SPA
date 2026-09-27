@@ -1,0 +1,79 @@
+\subsection{RQ1: Communication versus quality}\label{sec:rq1}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_pareto}
+\caption{Cost--quality trade-off on five datasets (mean of 5 seeds; each marker is one parameter setting). Top: k-means cost of the server's model relative to Centralised-Raw (lower is better). Bottom: ARI. FedCAST (red) dominates across the practically relevant range. k-FED is cheaper at the extreme low end on well-separated data. Change- and Norm-triggered reporting cannot operate below a data-dependent byte floor.}\label{fig:pareto}
+\end{figure*}
+
+Figure~\ref{fig:pareto} shows the Pareto fronts. FedCAST's front lies at or below every baseline from about 1.5\,\% of the Centralised-Raw traffic upward, on all five datasets. Table~\ref{tab:savings} quantifies the gap as the bytes each method needs to bring the cost within 5\,\% of the centralised learner. FedCAST needs \textbf{10--61\,\% fewer bytes than the best baseline} on each dataset, and \textbf{1.8--8.5$\times$ fewer than Periodic}. Some baselines never reach this quality within their parameter range: k-FED on NSL-KDD and Shuttle, and Periodic on Shuttle.
+
+\begin{table}[t]
+\centering\small
+\caption{Uplink kB needed to reach a cost ratio $\le1.05$ (mean curve, log-interpolated). ``--'': not reached.}\label{tab:savings}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrr@{}}
+\toprule
+ & \textbf{FedCAST} & Per. & Per.-$\Delta$ & k-FED & Chg. & Norm & saving\\
+\midrule
+SynDrift & \textbf{44} & 372 & 256 & 113 & 574 & 276 & 61\,\%\\
+NSL-KDD & \textbf{362} & 668 & 484 & -- & 969 & 907 & 25\,\%\\
+Shuttle & \textbf{133} & -- & -- & -- & 263 & 242 & 45\,\%\\
+Pen-Digits & \textbf{48} & 169 & 140 & 53 & 309 & 309 & 10\,\%\\
+Letter & \textbf{83} & 334 & 256 & 204 & 435 & 412 & 60\,\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\caption{Budget-matched cost ratio (lower is better; mean of 5 seeds) at 1/3/10\,\% of Centralised-Raw bytes. ``--'': the method cannot operate within that budget. Rows where no method is feasible are omitted.}\label{tab:matched}
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{@{}llrrrrrr@{}}
+\toprule
+Data & Bud. & \textbf{FedCAST} & Per. & Per.-$\Delta$ & k-FED & Chg. & Norm\\
+\midrule
+\multirow{3}{*}{SynDrift} & 1\% & -- & 2.796 & 2.813 & \textbf{1.128} & -- & --\\
+ & 3\% & \textbf{1.013} & 1.130 & 1.123 & 1.047 & -- & --\\
+ & 10\% & \textbf{1.007} & 1.046 & 1.011 & 1.013 & -- & 1.012\\
+\multirow{3}{*}{NSL-KDD} & 1\% & 1.084 & 1.157 & 1.158 & \textbf{1.082} & -- & --\\
+ & 3\% & \textbf{1.043} & 1.059 & 1.053 & 1.078 & -- & --\\
+ & 10\% & 1.027 & 1.039 & 1.031 & 1.078 & 1.030 & \textbf{1.025}\\
+\multirow{3}{*}{Shuttle} & 1\% & -- & 1.354 & 1.355 & \textbf{1.161} & -- & --\\
+ & 3\% & \textbf{1.076} & 1.297 & 1.263 & 1.089 & -- & --\\
+ & 10\% & 1.012 & 1.095 & 1.064 & 1.089 & 1.013 & \textbf{1.003}\\
+\multirow{2}{*}{Pen-Dig.} & 3\% & -- & -- & -- & \textbf{1.084} & -- & --\\
+ & 10\% & \textbf{1.011} & 1.105 & 1.097 & 1.030 & -- & --\\
+\multirow{2}{*}{Letter} & 3\% & \textbf{1.067} & 1.270 & 1.271 & 1.139 & -- & --\\
+ & 10\% & \textbf{1.036} & 1.079 & 1.072 & 1.052 & -- & --\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:matched} compares methods at equal budgets. Among the methods that can operate at small budgets (FedCAST, Periodic, Periodic-$\Delta$, k-FED), FedCAST obtains the lowest mean Friedman rank over the 10 dataset$\times$budget blocks where all four are feasible: 1.1, against 2.5 for k-FED, 2.8 for Periodic-$\Delta$ and 3.6 for Periodic. The Friedman test gives $\chi^2{=}19.6$, $p{=}2.1{\times}10^{-4}$ (Figure~\ref{fig:cd}). One-sided Wilcoxon tests over all paired seeds confirm the ordering after Holm correction: FedCAST beats Periodic ($p{=}3.5{\times}10^{-13}$, wins 96\,\% of pairs), Periodic-$\Delta$ ($p{=}5.4{\times}10^{-11}$, 94\,\%) and k-FED ($p{=}1.7{\times}10^{-9}$, 88\,\%). At 10\,\% of raw traffic, the change- and norm-triggered baselines become feasible and are within about 1\,\% of FedCAST, but they need 3--20$\times$ more bytes to get there (Table~\ref{tab:savings}). Two regimes favour k-FED: the very lowest budgets (1\,\%) and the small, well-separated Pen-Digits stream. There, a single message of $k'$ centres is cheaper than FedCAST's bootstrap summary of $q$ micro-clusters. This is a genuine limitation that we discuss in Section~\ref{sec:discussion}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\columnwidth]{fig_cd}
+\caption{Critical-difference diagram (Nemenyi, $\alpha{=}0.05$) of mean ranks by budget-matched cost ratio.}\label{fig:cd}
+\end{figure}
+
+Byte counts are credible. On a real broker, our per-message estimate (payload plus 24\,B record overhead) exceeded librdkafka's \texttt{txmsg\_bytes} by only 0.7--3.0\,\% for every method (Table~\ref{tab:k1}), so all reported savings are conservative.
+
+\subsection{RQ3: Drift and emerging clusters}\label{sec:rq3}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig_drift}
+\caption{ARI over time (20\,s window, mean of 5 seeds). On SynDrift, new clusters emerge at 105\,s and 195\,s at few nodes. FedCAST (10\,B/s per node, 59\,kB total) picks them up about 2.5$\times$ faster than Periodic and k-FED, while sending less than Periodic-60 (127\,kB). On Pen-Digits and Letter, node class sets rotate at 150\,s.}\label{fig:drift}
+\end{figure*}
+
+On SynDrift (Figure~\ref{fig:drift}, left), the novelty override and the objective-linked trigger let FedCAST report each emerging cluster as soon as enough mass has accumulated. The mean delay until an emerging class is recalled at $\ge50\,\%$ is $10.9\pm5.6$\,s at 10\,B/s and $9.4\pm2.6$\,s at 20\,B/s, against 27.4\,s for Periodic-60, Periodic-120, Periodic-$\Delta$ and k-FED. It does so with 59--87\,kB of uplink, compared with 113--127\,kB for the 60\,s periodic variants. Change-Threshold reacts within one evaluation interval (4.9\,s) but spends 574\,kB, almost 10$\times$ more. The cost ratio over the whole evolving stream is 1.027--1.043 for FedCAST, against 1.23--1.27 for the periodic methods and k-FED. Under class-rotation drift, which changes \emph{which node} sees a class but not the global mixture, all methods keep a valid model. FedCAST again pairs the lowest traffic with a lower cost than Periodic (Pen-Digits: 1.013 at 96\,kB against 1.042 at 173\,kB).
+
+\paragraph{The budget is respected} Figure~\ref{fig:budget} shows every node's cumulative spend. After the one-time bootstrap summary, which is paid from the token bucket's initial allowance $\kappa$, the slope equals the configured budget: 10.0 and 18\,B/s for $B/W{=}10$ and 20. No node ever crosses the hard envelope $\kappa+Bt$ of Proposition~\ref{prop:budget}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\columnwidth]{fig_budget}
+\caption{Per-node cumulative uplink for FedCAST on SynDrift with $B/W=10$ and $20$\,B/s (all 10 nodes). Dashed: the hard envelope $\kappa+Bt$; dotted: the rate $Bt$.}\label{fig:budget}
+\end{figure}

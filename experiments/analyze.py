@@ -103,15 +103,15 @@ def e1():
             x = np.array([p[0] for p in pts]) / 1e3
             kw = dict(color=COLOR[m], marker=MARK[m], ms=3.5 if m != "raw" else 6, lw=1.4 if m == "fedcast" else 0.9,
                       label=M_LABEL[m], zorder=5 if m == "fedcast" else 2)
-            axes[0, j].plot(x, [p[1] for p in pts], **kw)
+            axes[0, j].plot(x, np.minimum([p[1] for p in pts], 1.35), **kw)
             axes[1, j].plot(x, [p[2] for p in pts], **kw)
         axes[0, j].set_title(DS_LABEL[ds])
         for i in range(2):
             axes[i, j].set_xscale("log")
             axes[i, j].grid(alpha=0.25, lw=0.5)
-        axes[0, j].set_yscale("log")
+        axes[0, j].set_ylim(0.99, None)
         axes[1, j].set_xlabel("uplink bytes (kB, log)")
-    axes[0, 0].set_ylabel("k-means cost / Centralised-Raw\n(lower is better)")
+    axes[0, 0].set_ylabel("k-means cost / Centralised-Raw\n(lower is better; clipped at 1.35)")
     axes[1, 0].set_ylabel("ARI (higher is better)")
     h, lab = axes[0, 0].get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", ncol=8, frameon=False, bbox_to_anchor=(0.5, -0.03))
@@ -232,7 +232,7 @@ def cd_diagram(ranks: dict, cd: float, name: str):
     fig, ax = plt.subplots(figsize=(3.6, 1.2))
     lo, hi = 1, k
     ax.set_xlim(lo - 0.3, hi + 0.3)
-    ax.set_ylim(0, 1)
+    ax.set_ylim(0, 1.25)
     ax.axis("off")
     ax.hlines(0.8, lo, hi, color="k", lw=0.8)
     for r in range(lo, hi + 1):
@@ -242,8 +242,8 @@ def cd_diagram(ranks: dict, cd: float, name: str):
         y = 0.55 - 0.16 * (i % 3)
         ax.plot([r, r], [0.8, y], color=COLOR[m], lw=0.8)
         ax.text(r, y - 0.07, f"{M_LABEL[m]} ({r:.2f})", ha="center", fontsize=6.5, color=COLOR[m])
-    ax.hlines(0.97, lo, lo + cd, color="k", lw=1.5)
-    ax.text(lo + cd / 2, 1.02, f"CD = {cd:.2f}", ha="center", fontsize=6.5)
+    ax.hlines(1.1, lo, lo + cd, color="k", lw=1.5)
+    ax.text(lo + cd / 2, 1.15, f"CD = {cd:.2f}", ha="center", fontsize=6.5)
     savefig(fig, name)
 
 
@@ -276,7 +276,6 @@ def e2():
             axes[0, j].plot(range(len(parts)), cr, color=tc[t], ls=ls, marker="o", ms=3, lw=1, label=tl[t])
             axes[1, j].plot(range(len(parts)), ar, color=tc[t], ls=ls, marker="o", ms=3, lw=1, label=tl[t])
         axes[0, j].set_title(DS_LABEL[ds])
-        axes[0, j].set_yscale("log")
         for i in range(2):
             axes[i, j].set_xticks(range(len(parts)), [plab[p] for p in parts], rotation=40, fontsize=6.5)
             axes[i, j].grid(alpha=0.25, lw=0.5)
@@ -371,21 +370,24 @@ def e3():
             NB = np.array([e["node_bytes"] for e in r["series"]])
             for i in range(NB.shape[1]):
                 ax.plot(T, NB[:, i] / 1e3, color=COLOR["fedcast"] if B == 10 else "#ff7f0e", lw=0.5, alpha=0.6)
-            ax.plot(T, B * T / 1e3, color="k", lw=1.0, ls="--")
-            ax.text(T[-1], B * T[-1] / 1e3, f" B={B:g} B/s", fontsize=6.5, va="center")
+            q, d = r["config"]["mc"]["max_mc"], r["dim"]
+            kappa = max(B * r["config"]["window"], 1.05 * (20 + q * (24 + 4 * d) + 24))
+            ax.plot(T, (kappa + B * T) / 1e3, color="k", lw=1.0, ls="--")
+            ax.plot(T, B * T / 1e3, color="k", lw=0.7, ls=":")
+            ax.text(T[-1], (kappa + B * T[-1]) / 1e3, f" κ+Bt, B={B:g}", fontsize=6, va="center")
         ax.set_xlabel("stream time (s)")
         ax.set_ylabel("cumulative uplink per node (kB)")
-        ax.set_title("Per-node spend vs. budget (dashed)", fontsize=8)
+        ax.set_title("Per-node spend: hard envelope κ+Bt (dashed), rate Bt (dotted)", fontsize=7)
         ax.grid(alpha=0.25, lw=0.5)
         savefig(fig, "fig_budget")
 
 
 # ======================================================================= E4 - E7
-def simple_table(name, key_fn, title, keys_order=None):
+def simple_table(name, key_fn, title, keys_order=None, extra_ref=()):
     rows = load(name)
     if not rows:
         return None
-    ref = raw_ssq(rows)
+    ref = raw_ssq(rows + [r for e in extra_ref for r in load(e)])
     g = defaultdict(list)
     for r in rows:
         g[key_fn(r)].append(r)
@@ -459,7 +461,13 @@ def e5():
 
 
 def e6():
-    simple_table("E6", lambda r: f"{DS_LABEL[r['dataset']]} | {r['tag']}", "Sensitivity (FedCAST, B = 20)")
+    import re
+
+    def pretty(tag):
+        m = re.search(r"(half_life|max_mc)=MCParams\(.*?\1=([0-9.]+)", tag)
+        return f"{m.group(1)}={m.group(2)}" if m else tag.replace("default=", "default")
+    simple_table("E6", lambda r: f"{DS_LABEL[r['dataset']]} | {pretty(r['tag'])}", "Sensitivity (FedCAST, B = 20)",
+                 extra_ref=("E1",))
 
 
 def e7():
@@ -508,14 +516,95 @@ def kafka():
         for a in axes:
             a.set_xlabel("nodes")
             a.grid(alpha=0.25, lw=0.5)
-        axes[0].legend(frameon=False, fontsize=5.5)
+        axes[0].legend(frameon=False, fontsize=5.5, loc="center right", bbox_to_anchor=(1.0, 0.62))
         axes[1].legend(frameon=False, fontsize=6)
         fig.tight_layout()
         savefig(fig, "fig_kafka_scale")
 
 
+
+
+def e1_savings(threshold: float = 1.05):
+    """Bytes each method needs (mean curve, log-interpolated) to reach cost ratio <= threshold."""
+    rows = load("E1")
+    ref = raw_ssq(rows)
+    agg = defaultdict(list)
+    for r in rows:
+        c = r["config"]
+        agg[(r["dataset"], c["method"], c["param"])].append((r["bytes_up"], ratio(r, ref)))
+    out = {}
+    lines = [f"Bytes (kB) needed to reach cost ratio <= {threshold}", "",
+             "| Dataset | " + " | ".join(M_LABEL[m] for m in ["fedcast", "periodic", "pdelta", "kfed", "change", "norm"]) + " | saving vs best baseline |",
+             "|---|" + "---|" * 7]
+    for ds in DS_ORDER:
+        need = {}
+        for m in ["fedcast", "periodic", "pdelta", "kfed", "change", "norm"]:
+            pts = sorted((np.mean([v[0] for v in vals]), np.mean([v[1] for v in vals]))
+                         for (d, mm, p), vals in agg.items() if d == ds and mm == m)
+            val = float("nan")
+            for (b0, r0), (b1, r1) in zip([(None, None)] + pts[:-1], pts):
+                if r1 <= threshold:
+                    if b0 is None or r0 <= threshold:
+                        val = b1
+                    else:  # interpolate in log-bytes between the last point above and first below
+                        w = (r0 - threshold) / max(r0 - r1, 1e-12)
+                        val = math.exp(math.log(b0) + w * (math.log(b1) - math.log(b0)))
+                    break
+            need[m] = val
+        base = [v for m, v in need.items() if m != "fedcast" and not math.isnan(v)]
+        best = min(base) if base else float("nan")
+        out[ds] = {**need, "saving_vs_best_baseline": (1 - need["fedcast"] / best) if base else None}
+        cells = ["—" if math.isnan(need[m]) else f"{need[m]/1e3:.0f}" for m in need]
+        sv = out[ds]["saving_vs_best_baseline"]
+        lines.append(f"| {DS_LABEL[ds]} | " + " | ".join(cells) + f" | {'—' if sv is None else f'{sv*100:.0f}%'} |")
+    (TAB / "savings.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / "savings.json", "w"), indent=1)
+    print("\n".join(lines))
+
+def e8():
+    """Targeted ablations: novelty -> detection delay; dual ascent -> spend under a loose budget;
+    link price -> where the bytes go under loose budgets on heterogeneous links."""
+    rows = load("E8")
+    if not rows:
+        return
+    ref = raw_ssq(load("E1") + load("E4"))
+    lines = ["| Component | Setting | Variant | kB up | wire kB | cost ratio | target metric |", "|---|---|---|---|---|---|---|"]
+    out = {}
+    g = defaultdict(list)
+    for r in rows:
+        g[(r["dataset"], r["tag"], r["config"]["param"])].append(r)
+    for (ds, tag, B), rs in sorted(g.items()):
+        kb = np.mean([r["bytes_up"] for r in rs]) / 1e3
+        wire = np.mean([r["wire_up"] for r in rs]) / 1e3
+        cr = np.nanmean([ratio(r, ref) for r in rs])
+        if tag.startswith("novelty"):
+            dl = [detection_delays(r) for r in rs]
+            m, h = mean_ci(dl)
+            metric = f"detection delay {m:.1f} ± {h:.1f} s"
+            comp = "novelty override"
+        elif tag.startswith("dual"):
+            use = np.mean([r["bytes_up"] / (r["config"]["param"] * r["config"]["duration"] * r["config"]["nodes"]) for r in rs])
+            metric = f"budget used {use*100:.0f}%"
+            comp = "dual ascent"
+        else:
+            ratios = []
+            for r in rs:
+                links = r["config"]["links"]
+                per = r["bytes_up_per_node"]
+                poor = [per[i] for i in range(len(per)) if links[i % len(links)] in ("poor", "cellular")]
+                good = [per[i] for i in range(len(per)) if links[i % len(links)] in ("lan", "wan")]
+                ratios.append(np.mean(poor) / np.mean(good))
+            metric = f"bytes(bad links)/bytes(good links) {np.mean(ratios):.2f}"
+            comp = "link price"
+        out[f"{ds}|{tag}|{B}"] = dict(kb=kb, wire=wire, ratio=cr, metric=metric)
+        lines.append(f"| {comp} | {DS_LABEL[ds]}, B={B:g} | {tag} | {kb:.1f} | {wire:.1f} | {cr:.3f} | {metric} |")
+    (TAB / "E8_targeted.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / "E8_targeted.json", "w"), indent=1)
+    print("\n".join(lines))
+
+
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "kafka"]
+    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "kafka"]
     for w in which:
         globals()[w]()
         print("done", w, flush=True)

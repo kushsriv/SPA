@@ -1,0 +1,27 @@
+\section{Experimental setup}\label{sec:setup}
+
+\paragraph{Research questions} \textbf{RQ1} How much communication does FedCAST save at equal clustering quality, and what quality does it achieve at equal byte budgets? \textbf{RQ2} How does quality depend on the degree of statistical heterogeneity? \textbf{RQ3} How fast does the global model react to drift and to newly emerging clusters? \textbf{RQ4} How robust is the system to heterogeneous links, outages, and coordinator or broker failures? \textbf{RQ5} How does it scale with the number of nodes?
+
+\paragraph{Datasets} Labels are used for evaluation only. \emph{SynDrift} is our seeded evolving stream: 60k points in $d{=}10$ from $k{=}15$ anisotropic Gaussians with random orientation, per-axis scales in $[0.3,1.5]$ and Dirichlet(2) sizes. Four clusters drift by 5 units, two clusters emerge at 35\,\% and 65\,\% of the stream, and one vanishes at 50\,\%. \emph{NSL-KDD}~\cite{tavallaee2009nslkdd}: network-intrusion records with 5 classes (normal, DoS, probe, R2L, U2R). We log-transform the 38 numeric features and one-hot encode protocol and flag, giving 51 features; we use a random sample of 60k of the 126k records. \emph{Shuttle}, \emph{Pen-Digits} and \emph{Letter} come from PMLB~\cite{olson2017pmlb}: 58k$\times$9 with 7 classes and 78\,\% majority, 11k$\times$16 with 10 classes, and 20k$\times$16 with 26 classes. Features are standardised.
+
+\paragraph{Streams and partitions} The data are split across $m{=}10$ nodes and replayed over 300\,s of stream time with a 1\,s tick. Partitions: IID; Dirichlet($\alpha$) label skew~\cite{hsu2019noniid} with $\alpha\in\{1,0.3,0.1\}$ (default $0.3$); cluster-exclusive nodes that hold $k'\in\{2,1\}$ classes (the regime of~\cite{dennis2021kfed}); and \emph{class-rotation drift}, where at 50\,\% of the stream every node switches to the classes of its neighbour.
+
+\paragraph{Network} Nodes alternate between a WAN link (80\,ms delay, 1\,\% loss, 5\,Mbit/s) and a cellular link (150\,ms, 3\,\%, 1\,Mbit/s). RQ4 adds LAN and poor links (300\,ms, 8\,\%, 128\,kbit/s) and 45\,s outages on three nodes. Lost messages are retransmitted after a 300\,ms timeout, and the retransmitted bytes are counted as wire bytes.
+
+\paragraph{Baselines} All baselines share FedCAST's local micro-clusterer and aggregator, so differences come from \emph{what and when} each node sends:
+\emph{Centralised-Raw} streams every point through Kafka to one server-side micro-clusterer with $mq$ slots, giving the quality upper bound;
+\emph{Naive} sends the full summary whenever it changed;
+\emph{Periodic} sends the full summary every $T$ seconds, as in classic federated rounds~\cite{mcmahan2017fedavg};
+\emph{Periodic-$\Delta$} sends only the changed micro-clusters every $T$ seconds;
+\emph{Change-Threshold} sends micro-clusters that were created, deleted, or changed by more than $\varepsilon$ relative to their radius or weight~\cite{tran2013communication,gama2011dgclust};
+\emph{Norm-Trigger} sends changed micro-clusters when the relative norm of the summary change exceeds $\delta$~\cite{ghosh2021eventgrad};
+\emph{k-FED}~\cite{dennis2021kfed} sends $k'$ local centres, as exact CF sums, every $T$ seconds, with the oracle number of local classes as $k'$.
+We sweep each method's knob: $T\in\{15,\dots,240\}$\,s, $\varepsilon\in\{0.3,1,3\}$, $\delta\in\{0.05,0.2,0.5\}$, and FedCAST budgets $B/W\in\{5,\dots,500\}$\,B/s per node.
+
+\paragraph{FedCAST settings} $q{=}50$, $H{=}120$\,s, $r_\text{mult}{=}2$, $r_\text{min}{=}0.25$; $\gamma{=}0.9$, $\rho{=}1$, $\eta{=}0.5$, $W{=}10$\,s; aggregation every 5\,s with 3 swaps and 2 restarts; $k$ equals the number of classes. The same values are used for every dataset; sensitivity is reported in Section~\ref{sec:ablation}.
+
+\paragraph{Metrics} Every 10\,s the server's current model labels the points of the last 60\,s, up to 3000 points. We report the \emph{cost ratio}, the k-means cost of the server model divided by that of Centralised-Raw on the same seed (the objective FedCAST controls; lower is better), together with ARI~\cite{hubert1985ari}, NMI, purity and per-class recall. Cost is measured in uplink bytes: payload plus a 24-byte per-record Kafka overhead, which is validated against Kafka's producer statistics in Section~\ref{sec:rq4}. Averages exclude the first 10\,\% of the stream.
+
+\paragraph{Statistical protocol} Each configuration is run with 5 seeds, which vary the partition, the stream order, the links and the aggregation. For budget-matched comparisons we interpolate every method's (bytes, quality) curve per seed at 1\,\%, 3\,\% and 10\,\% of Centralised-Raw's bytes, in log-bytes, keeping the best quality attainable within the budget. A method that cannot operate at a budget is marked infeasible. We use the Friedman test with the Nemenyi critical difference over dataset$\times$budget blocks, and one-sided Wilcoxon signed-rank tests with Holm correction~\cite{demsar2006statistical}.
+
+\paragraph{Implementation} Python 3.11, NumPy, scikit-learn and confluent-kafka (librdkafka); Apache Kafka 3.8 in KRaft mode. All runs used one 4-core machine; the complete system also runs on a laptop with under 1\,GB of RAM.

@@ -172,3 +172,13 @@ def test_partitions():
 
 def test_decay_factor():
     assert decay_factor(10.0, 0.0, 10.0) == pytest.approx(0.5)
+
+
+def test_empty_node_state_roundtrips():
+    """A node whose server-side state is empty must still be checkpointable (50-node Kafka bug)."""
+    s = codec.Summary(codec.KIND_FULL, 7, 3, 1.0, np.zeros(0, np.int64), np.zeros(0),
+                      np.zeros((0, 5)), np.zeros(0), np.zeros(0), np.zeros(0, np.int64))
+    r = codec.decode_summary(codec.encode_summary(s))
+    assert r.LS.shape == (0, 5) and r.node == 7
+    vals = []
+    assert np.array([v for v in vals]).reshape(0, 5).shape == (0, 5)

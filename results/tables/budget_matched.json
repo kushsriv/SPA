@@ -1,0 +1,122 @@
+{
+ "syndrift|low": {
+  "fedcast": null,
+  "periodic": 2.796364997608891,
+  "pdelta": 2.813308557124574,
+  "kfed": 1.1279348608600734,
+  "change": null,
+  "norm": null
+ },
+ "syndrift|mid": {
+  "fedcast": 1.0134746668286039,
+  "periodic": 1.1302772378448402,
+  "pdelta": 1.1227768738368467,
+  "kfed": 1.0472555701432444,
+  "change": null,
+  "norm": null
+ },
+ "syndrift|high": {
+  "fedcast": 1.0066331522991954,
+  "periodic": 1.0457983184504618,
+  "pdelta": 1.011108222418758,
+  "kfed": 1.0133531844511916,
+  "change": null,
+  "norm": 1.012427753547477
+ },
+ "nslkdd|low": {
+  "fedcast": 1.0842922741717358,
+  "periodic": 1.15728510132631,
+  "pdelta": 1.1575510781373766,
+  "kfed": 1.0819651101219834,
+  "change": null,
+  "norm": null
+ },
+ "nslkdd|mid": {
+  "fedcast": 1.043067085035184,
+  "periodic": 1.0594932096303349,
+  "pdelta": 1.0533562261493898,
+  "kfed": 1.0783592185062294,
+  "change": null,
+  "norm": null
+ },
+ "nslkdd|high": {
+  "fedcast": 1.0270668253234967,
+  "periodic": 1.038847796474495,
+  "pdelta": 1.0308900664413818,
+  "kfed": 1.0783592185062294,
+  "change": 1.0299770167942448,
+  "norm": 1.0248815110019107
+ },
+ "shuttle|low": {
+  "fedcast": null,
+  "periodic": 1.35405164540056,
+  "pdelta": 1.3550162701461677,
+  "kfed": 1.161191970657677,
+  "change": null,
+  "norm": null
+ },
+ "shuttle|mid": {
+  "fedcast": 1.0760973009659387,
+  "periodic": 1.2971925465107998,
+  "pdelta": 1.2627084998518472,
+  "kfed": 1.0887866543286278,
+  "change": null,
+  "norm": null
+ },
+ "shuttle|high": {
+  "fedcast": 1.0119538137877817,
+  "periodic": 1.094686317932966,
+  "pdelta": 1.0640621340023853,
+  "kfed": 1.0887866543286278,
+  "change": 1.013174503634147,
+  "norm": 1.0031946639761735
+ },
+ "pendigits|low": {
+  "fedcast": null,
+  "periodic": null,
+  "pdelta": null,
+  "kfed": null,
+  "change": null,
+  "norm": null
+ },
+ "pendigits|mid": {
+  "fedcast": null,
+  "periodic": null,
+  "pdelta": null,
+  "kfed": 1.0836114583171703,
+  "change": null,
+  "norm": null
+ },
+ "pendigits|high": {
+  "fedcast": 1.0112863122588176,
+  "periodic": 1.105018113358342,
+  "pdelta": 1.09707411940454,
+  "kfed": 1.029923854255551,
+  "change": null,
+  "norm": null
+ },
+ "letter|low": {
+  "fedcast": null,
+  "periodic": null,
+  "pdelta": null,
+  "kfed": null,
+  "change": null,
+  "norm": null
+ },
+ "letter|mid": {
+  "fedcast": 1.0667999471607235,
+  "periodic": 1.2702956900820628,
+  "pdelta": 1.2708362618139082,
+  "kfed": 1.139278754527217,
+  "change": null,
+  "norm": null
+ },
+ "letter|high": {
+  "fedcast": 1.0355297984419856,
+  "periodic": 1.07902628669576,
+  "pdelta": 1.0715620070080756,
+  "kfed": 1.051932168042402,
+  "change": null,
+  "norm": null
+ }
+}

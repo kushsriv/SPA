@@ -1,0 +1,12 @@
+{
+ "killed_after_s": 15,
+ "down_for_s": 8.010859966278076,
+ "restore_ms": 1078.6192417144775,
+ "restored_nodes": 10,
+ "duplicates_ignored_after_restart": 0,
+ "state_identical_to_shadow": true,
+ "max_node_mass_difference": 0.0,
+ "edges_msgs": 238,
+ "shadow_applied": 238,
+ "log": "[coord] restored 10 nodes from changelog in 1079 ms; resuming at {0: 13, 1: 18, 2: 15, 3: 28, 4: 19, 5: 32, 6: 22, 7: 13}\n{\n \"applied\": 78,\n \"duplicates_ignored\": 0,\n \"restored_nodes\": 10,\n \"restore_ms\": 1078.6192417144775,\n \"catch_up_s\": 0.5022201538085938,\n \"e2e_ms_p50\": 39.64698314666748,\n \"e2e_ms_p95\": 58.183813095092766,\n \"coord_rss_mb\": 141.55078125,\n \"model_version\": 42\n}\n"
+}
