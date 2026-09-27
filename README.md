@@ -6,6 +6,7 @@ Edge nodes cluster their local, non-IID data streams into micro-clusters. They d
 
 - 📄 Research proposal (problem, objectives, methodology, expected outcomes): [`docs/00_research_proposal.md`](docs/00_research_proposal.md)
 - 🗺️ Roadmap: [`docs/01_roadmap.md`](docs/01_roadmap.md)
+- 📘 One-document summary with flowcharts (PDF): [`docs/Project_Summary.pdf`](docs/Project_Summary.pdf)
 
 ## Quick start (Kafka testbed)
 
