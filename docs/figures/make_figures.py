@@ -42,7 +42,7 @@ digraph G {{
     label="Apache Kafka (KRaft)"; fontname="{FONT}"; fontsize=12; style="rounded"; color="{KAFKA}";
     t3 [label="fsc.global\\nlatest global model (compacted)", fillcolor="#f3f4f6", color="{KAFKA}"];
     t1 [label="fsc.summaries\\nkey = node_id → per-node order", fillcolor="#f3f4f6", color="{KAFKA}"];
-    t2 [label="fsc.snapshots\\nlatest full summary (compacted)", fillcolor="#f3f4f6", color="{KAFKA}"];
+    t2 [label="fsc.snapshots\\ncoordinator changelog (compacted)", fillcolor="#f3f4f6", color="{KAFKA}"];
     t4 [label="fsc.metrics\\nbytes, lag, latency", fillcolor="#f3f4f6", color="{KAFKA}"];
   }}
 
@@ -51,13 +51,13 @@ digraph G {{
     c1 [label="1. Apply deltas (per-node order)\\n2. Staleness decay + node weighting\\n3. Heterogeneity-aware macro-clustering\\n→ global model C(t)", fillcolor="#d1fae5", color="{COORD}"];
   }}
 
-  e2 -> t1 [ltail=cluster_edge, label="deltas, only when worth the cost"];
-  e3 -> t2 [ltail=cluster_edge, style=dashed, label="periodic snapshot"];
+  e2 -> t1 [ltail=cluster_edge, label="prioritised CF deltas, only when worth the cost"];
   e1 -> t4 [ltail=cluster_edge, style=dotted, label="telemetry"];
-  t1 -> c1 [label="consume"];
-  t2 -> c1 [style=dashed, label="recovery / replay"];
+  t1 -> c1 [label="consume (per-node order, dedup by seq)"];
+  c1 -> t2 [style=dashed, label="changelog checkpoint + offsets"];
+  t2 -> c1 [style=dashed, label="restore after crash, then replay"];
   c1 -> t3 [color="{COORD}", label="publish C(t)"];
-  t3 -> e1 [lhead=cluster_edge, color="{COORD}", style=bold, label="broadcast centers C(t)"];
+  t3 -> e1 [lhead=cluster_edge, color="{COORD}", style=bold, label="broadcast centres C(t)"];
   {{rank=same; t3; t1; t2; t4}}
 }}
 """

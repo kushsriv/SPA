@@ -1,11 +1,9 @@
-__pycache__/
-*.pyc
-.venv/
-.env
-data/raw/
-data/processed/
-results/
 *.log
-.ipynb_checkpoints/
+*.pyc
 .DS_Store
+.env
+.ipynb_checkpoints/
 .kafka/
+.venv/
+__pycache__/
+data/

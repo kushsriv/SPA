@@ -1,0 +1,97 @@
+\section{Problem formulation}\label{sec:problem}
+
+\paragraph{Setting} A set of $m$ edge nodes observes unlabeled streams. Node $i$ receives points $x\in\mathbb{R}^d$ drawn from a time-varying local distribution $P_i(t)$, and the local distributions are non-IID: $P_i\neq P_j$, and a cluster may be observed by a single node only. The network-wide distribution is the mixture $P(t)=\sum_i \pi_i(t)P_i(t)$. Raw data must not leave a node. Node $i$ is connected to a Kafka cluster by a link whose cost per byte, the \emph{price} $p_i(t)\ge 1$, varies with latency, loss and bandwidth. Node $i$ may spend at most $B_i$ bytes per budget window of length $W$.
+
+\paragraph{Cluster features} Node $i$ maintains a set $S_i(t)$ of at most $q$ micro-clusters, each summarised by a time-decayed cluster feature (CF)~\cite{zhang1996birch,aggarwal2003clustream,cao2006denstream}
+\begin{equation}
+\mathrm{CF}=(n,\ \mathbf{LS},\ SS,\ \tau),\quad n=\sum_x w_x,\ \mathbf{LS}=\sum_x w_x x,\ SS=\sum_x w_x\lVert x\rVert^2,
+\end{equation}
+with weights $w_x = 2^{-(t-t_x)/H}$ for half-life $H$ and last-update time $\tau$. Decaying a CF to time $t$ multiplies all three sums by the same factor $2^{-(t-\tau)/H}$. The centroid $\mu=\mathbf{LS}/n$ and the RMS radius are therefore invariant under decay, and a copy of a CF together with its $\tau$ determines its decayed value at any later time.
+
+\paragraph{Cost of a CF} For a centre $c$, the k-means cost of all points summarised by a CF has the closed form
+\begin{equation}\label{eq:cfcost}
+J(\mathrm{CF},c)=\sum_x w_x\lVert x-c\rVert^2 = SS-2\,\mathbf{LS}^\top c+n\lVert c\rVert^2 .
+\end{equation}
+For a set of centres $C=\{c_1,\dots,c_k\}$ let $J(\mathrm{CF};C)=\min_j J(\mathrm{CF},c_j)$. The minimiser depends only on $\mu$, because $J(\mathrm{CF},c)=n\lVert\mu-c\rVert^2+\text{const}$.
+
+\paragraph{Objective} The coordinator stores, for each node, the CFs it last received: $\hat S_i(t)$. From these it computes global centres $C(t)$. Let $C^\star(t)$ be the centres a centralised learner with all raw data would compute. We seek send policies that solve
+\begin{equation}\label{eq:obj}
+\min\ \frac1T\sum_{t}\Big[J\big(C(t);P(t)\big)-J\big(C^\star(t);P(t)\big)\Big]\quad
+\text{s.t.}\ \ \frac1T\sum_t b_i(t)\le \frac{B_i}{W}\ \ \forall i,
+\end{equation}
+where $b_i(t)$ is the number of bytes node $i$ sends at time $t$. The gap in~\eqref{eq:obj} has two sources: the macro-clustering itself, which any method incurs, and \emph{staleness}, the difference between $\hat S_i$ and $S_i$. FedCAST controls the second source directly.
+
+\section{FedCAST}\label{sec:method}
+
+FedCAST has three components (Figure~\ref{fig:arch}): an online CF micro-clusterer on every node, a budgeted and objective-linked send policy on every node, and a heterogeneity-aware aggregator at the coordinator. All communication goes through Kafka (Section~\ref{sec:system}).
+
+\subsection{Local summarisation}
+Each node runs a CluStream-style update~\cite{aggarwal2003clustream} with DenStream-style decay~\cite{cao2006denstream}. A point is absorbed by the nearest micro-cluster if it lies within $r_\text{mult}$ times that micro-cluster's RMS radius, where singletons use half the distance to their nearest neighbour and a floor $r_\text{min}$ applies. Otherwise the point opens a new micro-cluster. When all $q$ slots are full, the lightest micro-cluster is deleted if its decayed weight is below $w_\text{min}$; otherwise the two closest micro-clusters are merged. We keep an exact nearest-neighbour cache between centroids, updated in $O(qd)$ per change, so a merge costs $O(q)$ rather than $O(q^2d)$. Every slot carries a modification counter. The node also keeps a copy of the CFs it has sent, $\hat S_i$, which is \emph{exactly} the state held by the server, because both sides apply the same deterministic decay.
+
+\subsection{Objective-linked staleness}
+Pair the current and the server-side CFs of node $i$ by micro-cluster identifier; a missing CF counts as zero. For every identifier define
+\begin{equation}\label{eq:eid}
+e_{\mathrm{id}}=\big|J(\mathrm{CF}_{\mathrm{id}};C)-J(\widehat{\mathrm{CF}}_{\mathrm{id}};C)\big|
++\rho\Big(\lVert \mathbf{LS}_{\mathrm{id}}-\widehat{\mathbf{LS}}_{\mathrm{id}}\rVert+\bar c_{\mathrm{id}}\,\big|n_{\mathrm{id}}-\hat n_{\mathrm{id}}\big|\Big),
+\end{equation}
+where $C$ is the latest global model received on the downlink and $\bar c_{\mathrm{id}}$ is the larger norm of the two global centres the two copies are assigned to. The staleness of node $i$ is $\Delta_i=\sum_{\mathrm{id}}e_{\mathrm{id}}$. A micro-cluster that has not changed since it was sent contributes exactly zero, and $\Delta_i$ costs $O(|\text{dirty}|\,kd)$ to compute.
+
+\begin{proposition}[Cost error]\label{prop:cost}
+For any centres $C$, $\big|J(S_i;C)-J(\hat S_i;C)\big|\le\sum_{\mathrm{id}}\big|J(\mathrm{CF}_{\mathrm{id}};C)-J(\widehat{\mathrm{CF}}_{\mathrm{id}};C)\big|\le\Delta_i$. Consequently, the coordinator's estimate of the network-wide cost satisfies $|J(\hat S;C)-J(S;C)|\le\sum_i\Delta_i$.
+\end{proposition}
+
+\begin{proposition}[Centroid displacement]\label{prop:centroid}
+Let $A_j$ be the set of identifiers assigned to centre $j$ in both $S_i$ and $\hat S_i$. The Lloyd updates $c_j'=\mathbf{L}_j/N_j$ computed from the current CFs and $\hat c_j'=\hat{\mathbf{L}}_j/\hat N_j$ computed from the server copies, with $\mathbf{L}_j=\sum_{A_j}\mathbf{LS}_{\mathrm{id}}$ and $N_j=\sum_{A_j}n_{\mathrm{id}}$, satisfy
+\[
+\lVert c_j'-\hat c_j'\rVert\le\frac{1}{N_j}\sum_{\mathrm{id}\in A_j}\Big(\lVert\mathbf{LS}_{\mathrm{id}}-\widehat{\mathbf{LS}}_{\mathrm{id}}\rVert+\lVert\hat c_j'\rVert\,|n_{\mathrm{id}}-\hat n_{\mathrm{id}}|\Big)\le\frac{\Delta_i}{\rho N_j}
+\]
+whenever $\lVert\hat c_j'\rVert\le\bar c_{\mathrm{id}}$. This holds in particular at a Lloyd fixed point $\hat c_j'=c_j$, which is where a warm-started coordinator operates.
+\end{proposition}
+
+Proofs are in \ref{app:proofs}. Proposition~\ref{prop:cost} bounds the server's error in the k-means objective by the staleness. Proposition~\ref{prop:centroid} bounds how far the global centres can move because of staleness. Micro-clusters that switch to a different centre are captured by the cost term.
+
+\subsection{Budgeted, prioritised sending}\label{sec:policy}
+Once per tick, node $i$ runs Algorithm~\ref{alg:edge}.
+
+\emph{Prioritisation.} Sort the dirty micro-clusters by $e_{\mathrm{id}}$ and pick the smallest prefix that, together with all pending deletions, covers a fraction $\gamma$ of $\Delta_i$. This yields a payload of $b$ bytes that covers $D_c\ge\gamma\Delta_i$. Because every CF record has the same size, this greedy choice is the optimal fractional knapsack. The remaining small changes are not lost: they accumulate and are sent once they matter.
+
+\emph{Trigger.} Send if
+\begin{equation}\label{eq:trigger}
+D_c\ \ge\ \lambda_i\ p_i\ b\qquad\text{or}\qquad \text{novelty}_i\ \ge\ \max(\nu_\text{min},\ \nu\,N_i),
+\end{equation}
+provided the token bucket (rate $B_i/W$, capacity $\kappa_i=\max(B_i,\ \text{full-summary size})$) holds $b$ tokens. The novelty mass is the weight of new micro-clusters that lie farther than $3\times$ the radius from every global centre: a concept the server has not seen yet. This override is what makes node-exclusive clusters appear quickly.
+
+\emph{Dual ascent.} At the end of each window the multiplier is updated multiplicatively,
+\begin{equation}\label{eq:dual}
+\lambda_i\leftarrow\lambda_i\exp\!\Big(\eta\ \mathrm{clip}_{[-1,2]}\big(\tfrac{\text{spent}_i-B_i}{B_i}\big)\Big),
+\end{equation}
+which is projected subgradient ascent on $\log\lambda_i$ for the Lagrangian of~\eqref{eq:obj}. The update is scale-free: $\lambda$ carries the units of cost per byte, but only ratios enter~\eqref{eq:dual}, so the same $\eta$ works on every dataset. $\lambda_i$ is initialised to the first observed ratio $D_c/(p_ib)$.
+
+\begin{proposition}[Budget]\label{prop:budget}
+(i) Hard: over any interval of length $T$, node $i$ sends at most $\kappa_i+B_iT/W$ bytes. (ii) Long-run: if staleness is bounded ($\Delta_i\le\Delta_\text{max}$), messages have at least $b_\text{min}$ bytes, $p_i\ge1$, and the novelty override is disabled, then after $n$ windows $\frac1n\sum_{w\le n}\min\!\big(\frac{\text{spent}_w-B_i}{B_i},2\big)\le\frac{\log(\lambda^\dagger e^{2\eta}/\lambda_0)}{\eta n}$ with $\lambda^\dagger=\Delta_\text{max}/b_\text{min}$. The average spend therefore converges to at most $B_i$ at rate $O(1/n)$.
+\end{proposition}
+
+\emph{Link price.} $p_i$ is an exponentially weighted estimate of $(\text{wire bytes}/\text{payload bytes})\cdot(1+\text{latency}/\ell_\text{ref})$. Retransmissions and slow links therefore make bytes more expensive, and such nodes send only higher-value updates. Both quantities are available on a real device from the producer's delivery reports.
+
+\begin{algorithm}[t]
+\caption{FedCAST edge node $i$ (one tick at time $t$)}\label{alg:edge}
+\small
+\begin{algorithmic}[1]
+\State ingest new points into the CF micro-clusters; prune stale ones
+\State refill token bucket: $\text{tok}\gets\min(\kappa,\text{tok}+\Delta t\,B/W)$
+\If{no global model yet} send full summary (bootstrap) \EndIf
+\State compute $e_{\mathrm{id}}$ for dirty ids and deletions (Eq.~\ref{eq:eid}); $\Delta\gets\sum e$
+\State $P\gets$ smallest top-$e$ prefix with coverage $D_c\ge\gamma\Delta$; $b\gets$ bytes of $P$ + deletions
+\If{($D_c\ge\lambda\,p\,b$ \textbf{or} novelty) \textbf{and} tok $\ge b$}
+  \State produce delta$(P,\text{deletions},\text{seq})$ to \texttt{fsc.summaries} with key \texttt{node-}$i$
+  \State update server copy $\hat S$; tok $\gets$ tok $-\,b$; seq $\gets$ seq$+1$
+\EndIf
+\State on delivery report: update price $p$; on new \texttt{fsc.global} record: update $C$
+\State at window end: update $\lambda$ with Eq.~\eqref{eq:dual}
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Heterogeneity-aware aggregation}
+The coordinator keeps, per node, the CFs it has received and applies each delta exactly once: a summary with sequence number $\le$ the last applied one is ignored. Every $T_\text{agg}$ it (i) decays all stored CFs to the current time, so that silent nodes fade out instead of freezing stale mass into the model; (ii) optionally rescales node $i$'s total mass $N_i$ to $N_i^\beta$ so that a single fast node cannot dominate; and (iii) runs weighted k-means over the CF centroids, warm-started from the previous model and followed by \emph{swap local search}~\cite{kanungo2004local}. The swap step moves the centre with the smallest Ward merge cost to the worst-served micro-cluster and keeps the move only if the total cost decreases. Warm starts keep cluster identities stable over time but get stuck when a cluster appears at a single node: the new cluster is absorbed by its nearest large neighbour. The swap step removes exactly this failure mode. A second k-means++~\cite{arthur2007kmeanspp} restart guards against poor local optima. The resulting model (centres, radii, weights) is published to a compacted Kafka topic.
+
+\paragraph{Complexity} Per point: $O(qd)$. Per tick and node: $O(|\text{dirty}|(kd+\log q))$. Per aggregation: $O(I\,mq\,kd)$ for $I$ Lloyd iterations, over at most $mq$ micro-clusters and never over raw points. Uplink messages cost $20+|P|(24+4d)+4\,|\text{deletions}|$ bytes plus about 24 bytes of Kafka record overhead.

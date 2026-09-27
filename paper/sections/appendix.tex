@@ -1,0 +1,19 @@
+\appendix
+\section{Proofs}\label{app:proofs}
+
+\paragraph{Proof of Proposition~\ref{prop:cost}} Micro-clusters are assigned independently, so $J(S_i;C)=\sum_{\mathrm{id}}J(\mathrm{CF}_{\mathrm{id}};C)$, where an identifier absent from one of the two sets contributes $0$ on that side. Pairing the two sums by identifier and applying the triangle inequality gives
+\[
+|J(S_i;C)-J(\hat S_i;C)|=\Big|\sum_{\mathrm{id}}\big(J(\mathrm{CF}_{\mathrm{id}};C)-J(\widehat{\mathrm{CF}}_{\mathrm{id}};C)\big)\Big|\le\sum_{\mathrm{id}}\big|J(\mathrm{CF}_{\mathrm{id}};C)-J(\widehat{\mathrm{CF}}_{\mathrm{id}};C)\big| .
+\]
+Each summand is the first term of $e_{\mathrm{id}}$ in~\eqref{eq:eid}, and the second term is non-negative, so the sum is at most $\Delta_i$. Summing over nodes gives the network-wide statement. Both copies are decayed to the same time with the same factor per identifier (Section~\ref{sec:problem}), so an unchanged micro-cluster has $e_{\mathrm{id}}=0$. \qed
+
+\paragraph{Proof of Proposition~\ref{prop:centroid}}
+\[
+c_j'-\hat c_j'=\frac{\mathbf{L}_j}{N_j}-\frac{\hat{\mathbf{L}}_j}{\hat N_j}=\frac{\mathbf{L}_j-\hat{\mathbf{L}}_j}{N_j}+\hat{\mathbf{L}}_j\Big(\frac1{N_j}-\frac1{\hat N_j}\Big)=\frac{\mathbf{L}_j-\hat{\mathbf{L}}_j}{N_j}+\hat c_j'\,\frac{\hat N_j-N_j}{N_j}.
+\]
+Hence $\lVert c_j'-\hat c_j'\rVert\le\big(\lVert\mathbf{L}_j-\hat{\mathbf{L}}_j\rVert+\lVert\hat c_j'\rVert\,|N_j-\hat N_j|\big)/N_j$. Because both sums run over the same identifiers $A_j$, the triangle inequality gives $\lVert\mathbf{L}_j-\hat{\mathbf{L}}_j\rVert\le\sum_{A_j}\lVert\mathbf{LS}_{\mathrm{id}}-\widehat{\mathbf{LS}}_{\mathrm{id}}\rVert$ and $|N_j-\hat N_j|\le\sum_{A_j}|n_{\mathrm{id}}-\hat n_{\mathrm{id}}|$. With $\lVert\hat c_j'\rVert\le\bar c_{\mathrm{id}}$, each summand is at most $e_{\mathrm{id}}/\rho$. \qed
+
+\paragraph{Proof of Proposition~\ref{prop:budget}}
+(i) A token bucket with rate $B_i/W$ and capacity $\kappa_i$ starts full, is never negative, and every send consumes its size. After time $T$ the total consumed is at most $\kappa_i+B_iT/W$.
+
+(ii) Let $\theta_w=\log\lambda_w$ and $g_w=\mathrm{clip}_{[-1,2]}\big((\text{spent}_w-B_i)/B_i\big)$, so $\theta_{w+1}=\theta_w+\eta g_w$. Telescoping gives $\sum_{w\le n}g_w=(\theta_{n+1}-\theta_1)/\eta$. Next we bound $\theta$ from above. Every send satisfies $D_c\ge\lambda p_i b$ with $D_c\le\Delta_\text{max}$, $p_i\ge1$ and $b\ge b_\text{min}$. If $\lambda>\lambda^\dagger=\Delta_\text{max}/b_\text{min}$, no send can happen, so $\text{spent}_w=0$, $g_w=-1$, and $\theta$ decreases. Since one update raises $\theta$ by at most $2\eta$, $\theta_w\le\max(\theta_1,\log\lambda^\dagger)+2\eta$ for all $w$. Substituting, $\frac1n\sum_{w\le n}g_w\le\frac{\log(\lambda^\dagger e^{2\eta}/\lambda_0)}{\eta n}$, using $\theta_1=\log\lambda_0\le\log\lambda^\dagger$ w.l.o.g. The left-hand side is the average relative overspend, clipped at $2$; overspends larger than $2B_i$ in a window are already excluded by the bucket whenever $\kappa_i\le3B_i$. \qed

@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: fedcast
+Version: 1.0.0
+Summary: Budget-aware federated stream clustering over Apache Kafka under non-IID data and network constraints
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.12
+Requires-Dist: scikit-learn>=1.4
+Requires-Dist: confluent-kafka>=2.6
+Requires-Dist: matplotlib>=3.8
+Requires-Dist: pyyaml>=6.0
