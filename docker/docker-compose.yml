@@ -1,0 +1,43 @@
+# Single-broker Kafka in KRaft mode (no ZooKeeper) - laptop friendly.
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: spa-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms512M"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  topics:
+    image: apache/kafka:3.8.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        B=kafka:19092
+        K=/opt/kafka/bin/kafka-topics.sh
+        $$K --bootstrap-server $$B --create --if-not-exists --topic fsc.summaries --partitions 8 --replication-factor 1
+        $$K --bootstrap-server $$B --create --if-not-exists --topic fsc.snapshots --partitions 8 --replication-factor 1 --config cleanup.policy=compact
+        $$K --bootstrap-server $$B --create --if-not-exists --topic fsc.global    --partitions 1 --replication-factor 1 --config cleanup.policy=compact
+        $$K --bootstrap-server $$B --create --if-not-exists --topic fsc.metrics   --partitions 1 --replication-factor 1
+        $$K --bootstrap-server $$B --create --if-not-exists --topic fsc.raw       --partitions 8 --replication-factor 1
+        $$K --bootstrap-server $$B --list
