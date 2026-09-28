@@ -95,6 +95,8 @@ def per_mc_staleness(node, now: float, centers: np.ndarray | None, radii: np.nda
       "uniform"    |dSS| + 2R||dLS|| + R^2|dn| with R the node's data radius:
                    a bound on |J(CF,c) - J(CF^,c)| that holds for EVERY centre
                    with ||c|| <= R, so it needs no global model (no downlink)
+      "hybrid"     objective + norm, each normalised to sum 1 (E11: worse than
+                   objective alone; kept only to reproduce that negative result)
 
     Returns (slots, e_slots, del_ids, e_dels, novelty_mass) for the dirty slots.
     """
@@ -103,6 +105,14 @@ def per_mc_staleness(node, now: float, centers: np.ndarray | None, radii: np.nda
     if not slots and not dels:
         return [], np.zeros(0), [], np.zeros(0), 0.0
     hl = node.params.half_life
+    if rank == "hybrid":
+        # scale-free blend: each signal normalised to sum 1 over the candidates, then added,
+        # so an MC ranks high if it matters for the current model OR is a large change
+        s1, eo_s, d1, eo_d, nov = per_mc_staleness(node, now, centers, radii, rho, far_factor, r_floor, "objective")
+        _, en_s, _, en_d, _ = _per_mc_simple(node, now, slots, dels, "norm")
+        zo = max(eo_s.sum() + eo_d.sum(), 1e-12)
+        zn = max(en_s.sum() + en_d.sum(), 1e-12)
+        return s1, eo_s / zo + en_s / zn, d1, eo_d / zo + en_d / zn, nov
     if rank != "objective":
         return _per_mc_simple(node, now, slots, dels, rank)
     r = np.maximum(radii, r_floor)
@@ -236,7 +246,7 @@ class FedCAST(Policy):
         from .codec import KAFKA_RECORD_OVERHEAD, summary_size
         self._refill(node, now)
         g = node.global_model
-        if g is None and self.rank == "objective":  # bootstrap: the server has no model yet
+        if g is None and self.rank in ("objective", "hybrid"):  # bootstrap: the server has no model yet
             size = node.pending_bytes(full=True)
             ok = size > 0 and not node.sent and ((not self.use_bucket) or self.tokens >= size)
             return Decision(full=True) if ok else None

@@ -1,6 +1,6 @@
 # Brutally honest assessment: how good and how novel is FedCAST?
 
-This document is written as a hostile reviewer would write it, then answers each criticism with an experiment. Every number comes from `results/` (experiments E1–E10, K1–K4).
+This document is written as a hostile reviewer would write it, then answers each criticism with an experiment. Every number comes from `results/` (experiments E1–E11, K1–K4; about 3,800 runs in total).
 
 ## 1. Rating
 
@@ -9,7 +9,7 @@ This document is written as a hostile reviewer would write it, then answers each
 | **As a course project** (Stream Processing Analytics) | **9/10** | Kafka is essential to the design (ordering, idempotence, replay, compaction) and tested under crashes; real system plus simulator with one code base; 3,000+ seeded runs; statistics; under 1 GB of RAM. |
 | **Engineering quality** | 8/10 | Clean package, 13 tests (including numerical checks of the theory), resumable experiment runner, a real bug found and fixed by the 50-node run. Missing: CI, type checking, multi-machine runs. |
 | **Research novelty (before this review)** | **5/10** | Most building blocks are known (see §2). The one component carrying the gains was untested against its obvious competitor. |
-| **Research novelty (after this review)** | **6–6.5/10** | The novelty is now *isolated and proven where it holds* (evolving streams), the theory has a real end-to-end guarantee, and the limits are measured, not guessed. |
+| **Research novelty (after this review)** | **6/10** | The novelty is now *isolated and proven where it holds* (non-stationary streams, p = 0.003), the theory has a real end-to-end guarantee, and the limits are measured, not guessed. The effect is real but modest (mean cost-ratio gain 0.03), which caps the rating. |
 | **Realistic venue** | Q2 journal / good workshop now; Q1 (FGCS, IEEE IoT-J) plausible **only** if the story is reframed around the drift finding (§4) and a multi-machine deployment is added. TKDE: unlikely. |
 
 ## 2. What is *not* novel (and a reviewer will say so)
@@ -40,7 +40,24 @@ We implemented exactly that competitor (`rank="norm"`), plus a model-free varian
 | Drifting stream (SynDrift) | **80 %** of pairs | **1.5×10⁻⁵** |
 | Static real datasets | 45 % | 0.71 (tie) |
 
-**E10 (the four real datasets made into evolving streams):** see §5.
+**E10 (the four real datasets made into evolving streams, 100 pairs):**
+
+| Data | objective better | p |
+|---|---|---|
+| NSL-KDD (evolving) | 60 % | 0.048 |
+| Letter (evolving) | 80 % | 0.006 |
+| Shuttle (evolving) | 56 % | 0.33 |
+| Pen-Digits (evolving) | 32 % | 0.88 (magnitude better) |
+
+**Pooled over everything (250 pairs, `results/tables/objective_vs_norm_pooled.json`):**
+
+| Setting | pairs | objective better | mean cost-ratio gain | p |
+|---|---|---|---|---|
+| Static streams | 120 | 45 % | −0.001 | 0.71 (tie) |
+| **Non-stationary (drift + evolving)** | **130** | **62 %** | **+0.030** | **0.003** |
+| All | 250 | 54 % | +0.015 | 0.022 |
+
+On NSL-KDD (evolving), objective ranking reaches within 5 % of centralised quality at 232 kB; top-k magnitude never does.
 
 **Uncomfortable consequence:** on static data, most of FedCAST's advantage over the E1 baselines comes from the *budgeted sparse-delta structure*, which top-k magnitude also has, not from the objective score. The E1 baselines (Periodic, Change-Threshold, Norm-Trigger) lack sparsification, so they were weaker than the FL state of the art. **Any submission must include the top-k magnitude baseline.**
 
@@ -69,9 +86,16 @@ The defensible claim is sharper and more stream-specific than the original one:
 | Budget-adaptive resolution, q ≥ k | Big win on SynDrift (1.10 at 22 kB, 2.7× less than k-FED); bad on Letter (26 classes) | Data-dependent |
 | Fidelity-driven resolution (node measures its own complexity) | Slides along the same Pareto curve, no improvement | **Negative:** reported, not adopted |
 | Multi-resolution full summaries (k-FED-like coarsening + FedCAST trigger) | Worse than both k-FED and FedCAST almost everywhere | **Negative:** reported, not adopted |
-| Evolving versions of the four real datasets (E10) | %E10% | %E10VERDICT% |
+| Evolving versions of the four real datasets (E10) | Objective beats magnitude on NSL-KDD and Letter, ties on Shuttle, loses on Pen-Digits. **k-FED and Periodic-Δ never reach within 5 % of centralised on any of the four**, while every budgeted sparse-delta variant does | **Kept:** it is the evidence for §4 |
+| Hybrid ranking (objective + magnitude, normalised) | A 3-seed pilot looked excellent; the full 250-block test ranked it **worst** (mean rank 2.18 vs 1.84 objective, 1.98 magnitude; Friedman p = 8×10⁻⁴) | **Negative:** the pilot was noise; objective alone is best |
 
-## 6. What would make it a solid Q1 paper
+## 6. Final verdict
+
+* **What FedCAST really contributes.** (1) Budgeted, prioritised sparse CF deltas for federated *stream clustering*, a combination nobody had applied to this problem. On evolving streams it beats periodic and one-shot federated clustering by a wide margin: k-FED and Periodic-Δ never reach within 5 % of centralised on the four real evolving streams, and FedCAST does. (2) Objective-aware ranking, which is significantly better than the standard FL compressor on non-stationary streams (p = 0.003) and no worse on static ones. (3) An end-to-end staleness-robust approximation guarantee. (4) A Kafka-native, crash-proven implementation.
+* **What it does not contribute.** New stream-clustering algorithms, new budget control, or large effect sizes. Mean gains over the strongest baseline are a few percent of cost, or 10–40 % of bytes at equal quality.
+* **Negative results worth publishing.** The novelty override, link price and dual ascent add little quality. Fidelity-driven resolution, multi-resolution summaries and hybrid ranking do not help.
+
+## 7. What would make it a solid Q1 paper
 
 1. **Reframe the paper** around §4: "objective-aware communication matters under concept evolution", with top-k magnitude as the main competitor. Drop the novelty-override and link-price claims (or present them as negative results).
 2. **Replace Propositions 1–2** with the theorem in §4.2.

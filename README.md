@@ -15,6 +15,7 @@ edge nodes ──(prioritised CF deltas, only when worth it)──► Kafka fsc.
 |---|---|
 | 📄 Paper (PDF + LaTeX) | [`paper/`](paper/) |
 | 🧠 Why this stack / these features / the alternatives | [`docs/03_design_rationale.md`](docs/03_design_rationale.md) |
+| 🔍 Brutally honest novelty assessment (E9–E11) | [`docs/04_novelty_and_critique.md`](docs/04_novelty_and_critique.md) |
 | 📘 Project summary with flowcharts | [`docs/Project_Summary.pdf`](docs/Project_Summary.pdf) |
 | 🔬 Research proposal, roadmap | [`docs/00_research_proposal.md`](docs/00_research_proposal.md), [`docs/01_roadmap.md`](docs/01_roadmap.md) |
 | 💻 Low-memory laptop setup (under 1 GB RAM) | [`docs/02_low_memory_setup.md`](docs/02_low_memory_setup.md) |
@@ -52,7 +53,7 @@ Datasets: `syndrift`, `nslkdd`, `shuttle`, `pendigits`, `letter` (downloaded aut
 
 ```bash
 python -m pytest                                   # unit tests (incl. numerical checks of the propositions)
-python experiments/run.py E1 E2 E3 E4 E5 E6 E7     # about 2,000 seeded simulation runs, resumable
+python experiments/run.py E1 E2 E3 E4 E5 E6 E7 E8 E9 E10 E11   # about 3,800 seeded runs, resumable
 python experiments/kafka_experiments.py            # real-Kafka systems experiments K1-K4 (needs a broker)
 python experiments/analyze.py                      # figures -> paper/figures, tables -> results/tables
 cd paper && latexmk -pdf main.tex                  # the paper

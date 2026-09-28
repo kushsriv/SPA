@@ -14,6 +14,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker  # noqa: F401
 import numpy as np
 from scipy import stats
 
@@ -635,6 +636,7 @@ def e9():
                     lw=1.5 if v in ("objective", "aq") else 0.9, color=VC[v], label=VL[v],
                     ls="--" if v in ("norm", "uniform", "aq2") else "-")
         ax.set_xscale("log")
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         ax.set_title(DS_LABEL[ds])
         ax.set_xlabel("uplink kB (log)")
         ax.grid(alpha=0.25, lw=0.5)
@@ -719,6 +721,7 @@ def e10():
                              color=VC[v], lw=1.5 if v == "objective" else 0.9,
                              ls="--" if v in ("norm", "uniform") else "-", label=VL[v])
         axes[j].set_xscale("log")
+        axes[j].xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         axes[j].set_title(DS_LABEL[ds] + " (evolving)")
         axes[j].set_xlabel("uplink kB (log)")
         axes[j].grid(alpha=0.25, lw=0.5)
@@ -774,9 +777,72 @@ def e10():
     json.dump(out, open(TAB / "E10_evolving.json", "w"), indent=1)
     print("\n".join(lines))
 
+def e11():
+    """Hybrid ranking vs objective vs top-k magnitude, paired, on static, drifting and evolving streams."""
+    e1, e9, e10, e11r = load("E1"), load("E9"), load("E10"), load("E11")
+    if not e11r:
+        return
+    ref = raw_ssq(e1 + e10)
+    val = defaultdict(dict)   # (setting, ds, B, seed) -> {rank: ratio}; plus bytes
+    byt = defaultdict(dict)
+
+    def setting(r):
+        if r["config"]["partition"].startswith("evolve"):
+            return "evolving real"
+        return "drifting (SynDrift)" if r["dataset"] == "syndrift" else "static real"
+
+    def add(r, rank):
+        c = r["config"]
+        if c["method"] != "fedcast" or c.get("adaptive_q"):
+            return
+        key = (setting(r), r["dataset"], c["param"], c["seed"])
+        val[key][rank] = ratio(r, ref)
+        byt[key][rank] = r["bytes_up"]
+    for r in e1:
+        add(r, "objective")
+    for r in e9:
+        if r["tag"] in ("objective", "norm", "uniform"):
+            add(r, r["tag"])
+    for r in e10:
+        if r["tag"] in ("objective", "norm", "uniform"):
+            add(r, r["tag"])
+    for r in e11r:
+        add(r, "hybrid")
+    lines = ["| Setting | vs | pairs | hybrid better | median gain | one-sided Wilcoxon p | Holm p |",
+             "|---|---|---|---|---|---|---|"]
+    tests = []
+    for setg in ["static real", "drifting (SynDrift)", "evolving real", "all"]:
+        for other in ["norm", "objective"]:
+            a, b = [], []
+            for key, d in val.items():
+                if (setg == "all" or key[0] == setg) and "hybrid" in d and other in d:
+                    a.append(d["hybrid"])
+                    b.append(d[other])
+            if len(a) >= 6:
+                a, b = np.array(a), np.array(b)
+                w = stats.wilcoxon(a, b, alternative="less")
+                tests.append([setg, other, len(a), float((a < b).mean()), float(np.median(b - a)), float(w.pvalue)])
+    ps = sorted(range(len(tests)), key=lambda i: tests[i][5])
+    for rank_i, i in enumerate(ps):
+        tests[i].append(min(1.0, tests[i][5] * (len(tests) - rank_i)))
+    for t in tests:
+        lines.append(f"| {t[0]} | {t[1]} | {t[2]} | {t[3]*100:.0f}% | {t[4]:+.4f} | {t[5]:.2g} | {t[6]:.2g} |")
+    # Friedman over all paired blocks with all three rankings
+    blocks = [[d["hybrid"], d["objective"], d["norm"]] for d in val.values() if {"hybrid", "objective", "norm"} <= set(d)]
+    if len(blocks) >= 5:
+        B = np.array(blocks)
+        ranks = np.apply_along_axis(stats.rankdata, 1, B).mean(0)
+        chi, p = stats.friedmanchisquare(*B.T)
+        lines += ["", f"Friedman over {len(blocks)} paired blocks (dataset x setting x budget x seed): "
+                      f"mean ranks hybrid {ranks[0]:.2f}, objective {ranks[1]:.2f}, top-k magnitude {ranks[2]:.2f}; "
+                      f"chi2 = {chi:.1f}, p = {p:.2g}"]
+    (TAB / "E11_hybrid.md").write_text("\n".join(lines) + "\n")
+    json.dump({"tests": tests}, open(TAB / "E11_hybrid.json", "w"), indent=1)
+    print("\n".join(lines))
+
 
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "kafka"]
+    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "kafka"]
     for w in which:
         globals()[w]()
         print("done", w, flush=True)

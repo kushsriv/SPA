@@ -117,6 +117,13 @@ def experiments(seeds: int):
                    for ds in real for tag, kw in ranks for B in (2, 5, 10, 20, 50) for s in S]
                 + [(ds, v(EV, method=m, param=T, seed=s), m)
                    for ds in real for m in ("kfed", "pdelta") for T in (30, 60, 120) for s in S])
+    # E11 - hybrid ranking (objective + magnitude, each normalised) on every setting where
+    #       objective and top-k magnitude were compared: static (E1/E9), SynDrift (E9), evolving (E10)
+    H = {"rank": "hybrid"}
+    E["E11"] = ([(ds, v(BASE, method="fedcast", param=B, seed=s, **H), "hybrid")
+                 for ds in DATASETS for B in (2, 5, 10, 20, 50, 150) for s in S]
+                + [(ds, v(EV, method="fedcast", param=B, seed=s, **H), "hybrid")
+                   for ds in real for B in (2, 5, 10, 20, 50) for s in S])
     return E
 
 

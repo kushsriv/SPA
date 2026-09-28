@@ -1,0 +1,62 @@
+{
+ "objective_vs_norm|NSL-KDD": {
+  "n": 25,
+  "better": 0.6,
+  "median_gain": 0.025896553326940408,
+  "p": 0.04786673188209534
+ },
+ "objective_vs_norm|Shuttle": {
+  "n": 25,
+  "better": 0.56,
+  "median_gain": 0.020685802139333243,
+  "p": 0.32642054557800293
+ },
+ "objective_vs_norm|Pen-Digits": {
+  "n": 25,
+  "better": 0.32,
+  "median_gain": -0.005140386962807941,
+  "p": 0.8794667720794678
+ },
+ "objective_vs_norm|Letter": {
+  "n": 25,
+  "better": 0.8,
+  "median_gain": 0.007876692755498294,
+  "p": 0.005726665258407593
+ },
+ "objective_vs_norm|all 4 real evolving": {
+  "n": 100,
+  "better": 0.57,
+  "median_gain": 0.005043414393063883,
+  "p": 0.09279220206263533
+ },
+ "objective_vs_uniform|NSL-KDD": {
+  "n": 25,
+  "better": 0.4,
+  "median_gain": -0.028874330562361106,
+  "p": 0.7710767686367035
+ },
+ "objective_vs_uniform|Shuttle": {
+  "n": 25,
+  "better": 0.6,
+  "median_gain": 0.05800664283321799,
+  "p": 0.03773978352546692
+ },
+ "objective_vs_uniform|Pen-Digits": {
+  "n": 25,
+  "better": 0.44,
+  "median_gain": -0.003370150494837798,
+  "p": 0.7108968794345856
+ },
+ "objective_vs_uniform|Letter": {
+  "n": 25,
+  "better": 0.64,
+  "median_gain": 0.005656993434002278,
+  "p": 0.045158058404922485
+ },
+ "objective_vs_uniform|all 4 real evolving": {
+  "n": 100,
+  "better": 0.52,
+  "median_gain": 0.0012997513213018896,
+  "p": 0.29111442842367735
+ }
+}
