@@ -56,6 +56,7 @@ class MicroClusterModel:
         self.del_counter: list[int] = []            # counters of deletions (increasing)
         self.del_ids: list[int] = []                # ids deleted, aligned with del_counter
         self.points_seen = 0
+        self.capacity = q                            # may be lowered at run time (shrink_to)
         # nearest-neighbour cache between MC centroids (exact closest pair in O(q))
         self.nn_dist = np.full(q, np.inf)
         self.nn_idx = np.full(q, -1, dtype=np.int64)
@@ -164,7 +165,7 @@ class MicroClusterModel:
             self._touch(slot)
             return
         free = np.flatnonzero(~self.active)
-        if free.size:
+        if free.size and act.size < self.capacity:
             self._new(int(free[0]), x, now)
             return
         # full: delete the lightest MC if it is stale, otherwise merge the two closest
@@ -192,6 +193,21 @@ class MicroClusterModel:
         np.fill_diagonal(D, np.inf)
         i, j = np.unravel_index(int(np.argmin(D)), D.shape)
         return int(act[i]), int(act[j])
+
+    def shrink_to(self, q: int, now: float) -> None:
+        """Lower the capacity to q, merging the closest pairs of MCs (CF sums are exact)."""
+        self.capacity = max(1, min(q, len(self.n)))
+        while int(self.active.sum()) > self.capacity:
+            act = np.flatnonzero(self.active)
+            a = int(act[np.argmin(self.nn_dist[act])])
+            b = int(self.nn_idx[a])
+            self._decay_slot(a, now)
+            self._decay_slot(b, now)
+            self.n[a] += self.n[b]
+            self.LS[a] += self.LS[b]
+            self.SS[a] += self.SS[b]
+            self._touch(a)
+            self._delete(b)
 
     def prune(self, now: float) -> None:
         act = np.flatnonzero(self.active)

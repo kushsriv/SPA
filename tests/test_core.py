@@ -182,3 +182,32 @@ def test_empty_node_state_roundtrips():
     assert r.LS.shape == (0, 5) and r.node == 7
     vals = []
     assert np.array([v for v in vals]).reshape(0, 5).shape == (0, 5)
+
+
+def test_uniform_staleness_bound_holds_for_every_centre_set():
+    """Theorem (staleness-robust approximation), key step: for ANY centres with ||c|| <= R,
+    |J(S;C) - J(S^;C)| <= U = sum |dSS| + 2R||dLS|| + R^2|dn|  (the 'uniform' score)."""
+    from fedcast.policies import _per_mc_simple
+    node, X = _stream_node(Naive(), n=700, seed=5)
+    for i, x in enumerate(X[:350]):
+        node.ingest(x, i * 0.1)
+    s = node.build(35.0, full=True)
+    node.commit(s, 0)
+    for i, x in enumerate(X[350:]):
+        node.ingest(x * 1.3 + 0.5, 35.0 + i * 0.1)   # drift
+    now = 70.0
+    node.mc.prune(now)
+    slots, dels = node.dirty()
+    _, e_s, _, e_d, _ = _per_mc_simple(node, now, slots, dels, "uniform")
+    U = e_s.sum() + e_d.sum()
+    act = np.flatnonzero(node.mc.active)
+    R = float(np.linalg.norm(node.mc.LS[act] / node.mc.n[act, None], axis=1).max())
+    _, n1, L1, S1 = node.current_arrays(now)
+    _, n0, L0, S0 = node.sent_arrays(now)
+    r = rng(11)
+    for _ in range(200):
+        C = r.normal(size=(4, 3))
+        C *= (R * r.uniform(0, 1, (4, 1))) / np.linalg.norm(C, axis=1, keepdims=True)
+        J1 = cf_cost(n1, L1, S1, C).min(1).sum()
+        J0 = cf_cost(n0, L0, S0, C).min(1).sum()
+        assert abs(J1 - J0) <= U + 1e-6

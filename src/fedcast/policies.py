@@ -75,8 +75,9 @@ def staleness(cur, sent, centers: np.ndarray, radii: np.ndarray, rho: float = 1.
     return cost_term + rho * mass_term, max(0.0, far1 - far0), cost_term, mass_term
 
 
-def per_mc_staleness(node, now: float, centers: np.ndarray, radii: np.ndarray, rho: float = 1.0,
-                     far_factor: float = 3.0, r_floor: float = 0.1):
+def per_mc_staleness(node, now: float, centers: np.ndarray | None, radii: np.ndarray | None,
+                     rho: float = 1.0, far_factor: float = 3.0, r_floor: float = 0.1,
+                     rank: str = "objective"):
     """Per-micro-cluster decomposition of the staleness score.
 
     For every MC id, e_id = |J_id(cur) - J_id(sent)| + rho * (||LS - LS^|| + ||c|| |n - n^|),
@@ -86,15 +87,26 @@ def per_mc_staleness(node, now: float, centers: np.ndarray, radii: np.ndarray, r
     centroid displacement (Prop. 2); an MC that has not changed since it was
     sent contributes exactly 0 because both copies decay identically.
 
+    rank selects how micro-clusters are scored (and hence prioritised):
+      "objective"  e_id as above (FedCAST; needs the global centres C)
+      "norm"       ||(dn, dLS, dSS)||, i.e. top-k sparsification by change
+                   magnitude with implicit error feedback (the standard
+                   federated-learning compressor), same budget controller
+      "uniform"    |dSS| + 2R||dLS|| + R^2|dn| with R the node's data radius:
+                   a bound on |J(CF,c) - J(CF^,c)| that holds for EVERY centre
+                   with ||c|| <= R, so it needs no global model (no downlink)
+
     Returns (slots, e_slots, del_ids, e_dels, novelty_mass) for the dirty slots.
     """
     mc = node.mc
     slots, dels = node.dirty()
     if not slots and not dels:
         return [], np.zeros(0), [], np.zeros(0), 0.0
+    hl = node.params.half_life
+    if rank != "objective":
+        return _per_mc_simple(node, now, slots, dels, rank)
     r = np.maximum(radii, r_floor)
     cn = np.linalg.norm(centers, axis=1)
-    hl = node.params.half_life
     from .microcluster import decay_factor
 
     def cost_of(n, LS, SS):
@@ -142,6 +154,44 @@ def per_mc_staleness(node, now: float, centers: np.ndarray, radii: np.ndarray, r
     return slots, e_slots, dels, e_dels, novelty
 
 
+def _cf_pairs(node, now: float, slots, dels):
+    """Decayed (current, server-copy) CF arrays for dirty slots and for deletions."""
+    from .microcluster import decay_factor
+    mc, hl, d = node.mc, node.params.half_life, node.dim
+    sl = np.array(slots, dtype=int)
+    f = decay_factor(now, mc.t[sl], hl) if len(sl) else np.zeros(0)
+    n1, L1, S1 = mc.n[sl] * f, mc.LS[sl] * f[:, None], mc.SS[sl] * f
+    n0, L0, S0 = np.zeros(len(sl)), np.zeros((len(sl), d)), np.zeros(len(sl))
+    for j, i in enumerate(mc.ids[sl]):
+        pv = node.sent.get(int(i))
+        if pv is not None:
+            f0 = decay_factor(now, pv[3], hl)
+            n0[j], L0[j], S0[j] = pv[0] * f0, pv[1] * f0, pv[2] * f0
+    vals = [node.sent[i] for i in dels]
+    fd = decay_factor(now, np.array([v[3] for v in vals]), hl) if vals else np.zeros(0)
+    nd = np.array([v[0] for v in vals]) * fd if vals else np.zeros(0)
+    Ld = np.array([v[1] for v in vals]) * fd[:, None] if vals else np.zeros((0, d))
+    Sd = np.array([v[2] for v in vals]) * fd if vals else np.zeros(0)
+    return (n1, L1, S1), (n0, L0, S0), (nd, Ld, Sd)
+
+
+def _per_mc_simple(node, now: float, slots, dels, rank: str):
+    (n1, L1, S1), (n0, L0, S0), (nd, Ld, Sd) = _cf_pairs(node, now, slots, dels)
+    dn, dL, dS = n1 - n0, np.linalg.norm(L1 - L0, axis=1), S1 - S0
+    if rank == "norm":
+        e_s = np.sqrt(dn ** 2 + dL ** 2 + dS ** 2)
+        e_d = np.sqrt(nd ** 2 + np.linalg.norm(Ld, axis=1) ** 2 + Sd ** 2)
+    elif rank == "uniform":
+        act = np.flatnonzero(node.mc.active)
+        mu = node.mc.LS[act] / np.maximum(node.mc.n[act], 1e-12)[:, None]
+        R = float(np.linalg.norm(mu, axis=1).max()) if len(act) else 1.0
+        e_s = np.abs(dS) + 2 * R * dL + R * R * np.abs(dn)
+        e_d = np.abs(Sd) + 2 * R * np.linalg.norm(Ld, axis=1) + R * R * np.abs(nd)
+    else:
+        raise ValueError(rank)
+    return slots, e_s, dels, e_d, 0.0
+
+
 # ---------------------------------------------------------------- FedCAST
 class FedCAST(Policy):
     """Budget-constrained, link-aware, objective-linked send policy.
@@ -161,7 +211,8 @@ class FedCAST(Policy):
                  gamma: float = 0.9, novelty_frac: float = 0.01, novelty_min: float = 3.0,
                  far_factor: float = 3.0, use_price: bool = True, use_dual: bool = True,
                  use_novelty: bool = True, use_bucket: bool = True, full: bool = False,
-                 lam0: float | None = None):
+                 lam0: float | None = None, rank: str = "objective"):
+        self.rank = rank
         self.B, self.W, self.rho, self.eta, self.gamma = budget, window, rho, eta, gamma
         self.novelty_frac, self.novelty_min, self.far_factor = novelty_frac, novelty_min, far_factor
         self.use_price, self.use_dual, self.use_novelty = use_price, use_dual, use_novelty
@@ -185,12 +236,13 @@ class FedCAST(Policy):
         from .codec import KAFKA_RECORD_OVERHEAD, summary_size
         self._refill(node, now)
         g = node.global_model
-        if g is None:  # bootstrap: the server has no model yet
+        if g is None and self.rank == "objective":  # bootstrap: the server has no model yet
             size = node.pending_bytes(full=True)
             ok = size > 0 and not node.sent and ((not self.use_bucket) or self.tokens >= size)
             return Decision(full=True) if ok else None
-        slots, e_s, dels, e_d, novelty = per_mc_staleness(node, now, g.centers, g.radii,
-                                                          self.rho, self.far_factor)
+        slots, e_s, dels, e_d, novelty = per_mc_staleness(
+            node, now, g.centers if g is not None else None, g.radii if g is not None else None,
+            self.rho, self.far_factor, rank=self.rank)
         if not slots and not dels:
             return None
         delta = float(e_s.sum() + e_d.sum())
@@ -337,4 +389,90 @@ class KFed(Policy):
         if now - self.last >= self.T and node.mc.active.any():
             self.last = now
             return Decision(kfed=True)
+        return None
+
+
+# ---------------------------------------------------------------- multi-resolution
+def coarsen_loss(n: np.ndarray, LS: np.ndarray, SS: np.ndarray, r: int, rng) -> tuple[float, int]:
+    """Relative increase of within-cluster scatter when the node's CFs are merged into r
+    groups (weighted k-means on centroids, exact CF sums). 0 = lossless."""
+    from .macro import weighted_kmeans
+    within = lambda a, b, c: float(np.maximum(c - np.einsum("ij,ij->i", b, b) / np.maximum(a, 1e-12), 0).sum())
+    base = within(n, LS, SS)
+    m = len(n)
+    if r >= m:
+        return 0.0, m
+    mu = LS / np.maximum(n, 1e-12)[:, None]
+    _, lab, _ = weighted_kmeans(mu, n, r, rng, restarts=1)
+    gn = np.bincount(lab, weights=n, minlength=r)
+    gL = np.zeros((r, LS.shape[1]))
+    np.add.at(gL, lab, LS)
+    gS = np.bincount(lab, weights=SS, minlength=r)
+    keep = gn > 0
+    return within(gn[keep], gL[keep], gS[keep]) / max(base, 1e-12) - 1.0, int(keep.sum())
+
+
+class FedCASTMR(FedCAST):
+    """FedCAST with fidelity-controlled multi-resolution summaries.
+
+    Under a tight budget (a fine full summary costs more than `horizon` seconds of
+    budget) the node sends *compressed full summaries*: its q fine micro-clusters
+    merged into the smallest number r of CF groups whose within-cluster scatter
+    grows by at most eps (fidelity chosen from the node's own data, no oracle k').
+    When to send is decided exactly as in FedCAST: set-level objective staleness
+    between the node's current fine state and what the server holds, against
+    lambda * p * b, with dual ascent and the token bucket. Under a loose budget
+    it behaves as FedCAST (prioritised fine deltas).
+
+    This unifies k-FED (coarse, periodic, oracle k') and delta streaming (fine,
+    frequent) under one budget-driven policy.
+    """
+    name = "fedcast-mr"
+    CANDIDATES = (2, 3, 4, 6, 8, 12, 16, 24, 32, 48)
+
+    def __init__(self, budget: float, eps: float = 0.5, horizon: float = 60.0, seed: int = 0, **kw):
+        super().__init__(budget, **kw)
+        self.eps, self.horizon = eps, horizon
+        self.k_local = None
+        self.rng = np.random.default_rng(seed + 99)
+        self.coarse_mode: bool | None = None
+
+    def _pick_r(self, node, now: float) -> int:
+        _, n, LS, SS = node.current_arrays(now)
+        for r in self.CANDIDATES:
+            if r >= len(n):
+                break
+            loss, eff = coarsen_loss(n, LS, SS, r, self.rng)
+            if loss <= self.eps:
+                return eff
+        return len(n)
+
+    def decide(self, node, now: float) -> Decision | None:
+        from .codec import KAFKA_RECORD_OVERHEAD, summary_size
+        if self.coarse_mode is None:
+            self.coarse_mode = node.full_bytes_max() > self.B / self.W * self.horizon
+        if not self.coarse_mode:
+            return super().decide(node, now)
+        self._refill(node, now)
+        if not node.mc.active.any():
+            return None
+        if self.k_local is None:
+            self.k_local = self._pick_r(node, now)
+        size = summary_size(self.k_local, 0, node.dim) + KAFKA_RECORD_OVERHEAD
+        affordable = (not self.use_bucket) or self.tokens >= size
+        g = node.global_model
+        if g is None:
+            return Decision(kfed=True) if (affordable and not node.sent) else None
+        cur = node.current_arrays(now)[1:]
+        old = node.sent_arrays(now)[1:]
+        delta, _, _, _ = staleness(cur, old, g.centers, g.radii, self.rho, self.far_factor)
+        p = node.link_price() if self.use_price else 1.0
+        score = delta / (p * size)
+        if self.lam is None:
+            self.lam = max(score, 1e-12)
+        if score >= self.lam and affordable:
+            self.k_local = self._pick_r(node, now)   # refresh resolution at send time
+            new_size = summary_size(self.k_local, 0, node.dim) + KAFKA_RECORD_OVERHEAD
+            if (not self.use_bucket) or self.tokens >= new_size:
+                return Decision(kfed=True)
         return None

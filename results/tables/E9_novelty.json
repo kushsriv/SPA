@@ -1,0 +1,38 @@
+{
+ "objective_vs_norm|drifting (SynDrift)": {
+  "n": 30,
+  "better": 0.8,
+  "median_gain": 0.012192373422033609,
+  "p": 1.5247613191604614e-05
+ },
+ "objective_vs_norm|static (4 real datasets)": {
+  "n": 120,
+  "better": 0.45,
+  "median_gain": -0.0006814254248271867,
+  "p": 0.7106211507257056
+ },
+ "objective_vs_norm|all": {
+  "n": 150,
+  "better": 0.52,
+  "median_gain": 0.00014433710404904154,
+  "p": 0.07179819639277459
+ },
+ "objective_vs_uniform|drifting (SynDrift)": {
+  "n": 30,
+  "better": 0.7333333333333333,
+  "median_gain": 0.009107235767228383,
+  "p": 0.00011581834405660629
+ },
+ "objective_vs_uniform|static (4 real datasets)": {
+  "n": 120,
+  "better": 0.5166666666666667,
+  "median_gain": 0.00038712485956871046,
+  "p": 0.02313294734617504
+ },
+ "objective_vs_uniform|all": {
+  "n": 150,
+  "better": 0.56,
+  "median_gain": 0.0014101399938178938,
+  "p": 0.0005318746094986745
+ }
+}

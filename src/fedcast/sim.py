@@ -23,7 +23,7 @@ from .microcluster import MCParams
 from .netem import PROFILES, Link, LinkProfile
 from .node import EdgeNode
 from .partition import exclusive_classes, partition
-from .policies import FedCAST, KFed, NormTrigger, ChangeThreshold, Naive, Periodic
+from .policies import FedCAST, FedCASTMR, KFed, NormTrigger, ChangeThreshold, Naive, Periodic
 
 
 @dataclass
@@ -53,6 +53,15 @@ class SimConfig:
     use_novelty: bool = True
     full_summary: bool = False
     gamma: float = 0.9
+    rank: str = "objective"       # objective | norm | uniform (FedCAST scoring)
+    adaptive_q: bool = False         # budget-adaptive summary resolution
+    q_horizon: float = 60.0          # a full summary may cost at most this many seconds of budget
+    q_min: int = 4
+    q_floor_k: float = 1.0           # q >= q_floor_k * k
+    mr_eps: float = 0.5              # fedcast-mr: max relative scatter increase when coarsening
+    aq_mode: str = "k"               # adaptive_q floor: "k" (q >= q_floor_k * k) | "fidelity" (data-driven)
+    aq_eps: float = 0.25             # fidelity floor: max relative scatter increase allowed
+    aq_warmup: float = 30.0          # seconds of data before the fidelity floor is measured
     eta: float = 0.5
     rho: float = 1.0
     k_local: int = 0                 # k-FED k' (0: oracle number of local classes)
@@ -64,7 +73,11 @@ def make_policy(cfg: SimConfig, k_local: int):
     if m == "fedcast":
         return FedCAST(budget=cfg.param * cfg.window, window=cfg.window, use_price=cfg.use_price,
                        use_dual=cfg.use_dual, use_novelty=cfg.use_novelty, full=cfg.full_summary,
-                       gamma=cfg.gamma, eta=cfg.eta, rho=cfg.rho)
+                       gamma=cfg.gamma, eta=cfg.eta, rho=cfg.rho, rank=cfg.rank)
+    if m == "fedcast-mr":
+        return FedCASTMR(budget=cfg.param * cfg.window, window=cfg.window, use_price=cfg.use_price,
+                         use_dual=cfg.use_dual, use_novelty=cfg.use_novelty, gamma=cfg.gamma, eta=cfg.eta,
+                         rho=cfg.rho, eps=cfg.mr_eps, seed=cfg.seed)
     if m == "naive":
         return Naive()
     if m == "periodic":
@@ -80,6 +93,37 @@ def make_policy(cfg: SimConfig, k_local: int):
     if m == "raw":
         return None
     raise ValueError(m)
+
+
+def resolution_for_budget(cfg: SimConfig, dim: int, k: int) -> int:
+    """Budget-adaptive resolution: the largest q whose full summary costs at most
+    q_horizon seconds of the node's budget, but never below the global model's
+    resolution k (a node must be able to represent every global cluster) and
+    never above max_mc."""
+    per_mc = 24 + 4 * dim
+    fixed = codec.summary_size(0, 0, dim) + codec.KAFKA_RECORD_OVERHEAD
+    q = int((cfg.param * cfg.q_horizon - fixed) // per_mc)
+    return int(min(max(q, cfg.q_min, int(round(cfg.q_floor_k * k))), cfg.mc.max_mc))
+
+
+def fidelity_resolution(cfg: SimConfig, node, now: float) -> int:
+    """Data-driven resolution: max(what the budget affords, the smallest r whose
+    coarsening raises the node's within-cluster scatter by at most aq_eps)."""
+    from .policies import FedCASTMR, coarsen_loss
+    per_mc = 24 + 4 * node.dim
+    fixed = codec.summary_size(0, 0, node.dim) + codec.KAFKA_RECORD_OVERHEAD
+    q_b = int((cfg.param * cfg.q_horizon - fixed) // per_mc)
+    _, n, LS, SS = node.current_arrays(now)
+    rng = np.random.default_rng(cfg.seed + node.id)
+    q_f = len(n)
+    for r in FedCASTMR.CANDIDATES:
+        if r >= len(n):
+            break
+        loss, eff = coarsen_loss(n, LS, SS, r, rng)
+        if loss <= cfg.aq_eps:
+            q_f = eff
+            break
+    return int(min(max(q_b, q_f, 2), cfg.mc.max_mc))
 
 
 def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
@@ -100,10 +144,13 @@ def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
             prof.outages = [(cfg.outage[0] * cfg.duration, cfg.outage[1] * cfg.duration)]
         links.append(Link(prof, np.random.default_rng(cfg.seed * 1000 + i)))
 
+    node_params = cfg.mc
+    if cfg.method == "fedcast" and cfg.adaptive_q and cfg.aq_mode == "k":
+        node_params = MCParams(**{**asdict(cfg.mc), "max_mc": resolution_for_budget(cfg, d, k)})
     nodes = []
     for i, s in enumerate(streams):
         k_loc = cfg.k_local or max(1, len(np.unique(ds.y[s.idx])))
-        nodes.append(EdgeNode(i, d, cfg.mc, make_policy(cfg, k_loc)))
+        nodes.append(EdgeNode(i, d, node_params, make_policy(cfg, k_loc)))
     if cfg.method == "raw":
         q_central = cfg.mc.max_mc * cfg.nodes
         coord = CentralCoordinator(k, d, MCParams(**{**asdict(cfg.mc), "max_mc": q_central}),
@@ -155,6 +202,9 @@ def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
                 node.ingest(ds.X[s.idx[j]], float(s.times[j]))
             if int(t) % 10 == 0:
                 node.mc.prune(t)
+            if (cfg.method == "fedcast" and cfg.adaptive_q and cfg.aq_mode == "fidelity"
+                    and abs(t - cfg.aq_warmup) < cfg.tick / 2):
+                node.mc.shrink_to(fidelity_resolution(cfg, node, t), t)
             node.policy.tick(t)
             dec = node.policy.decide(node, t)
             if dec is None:

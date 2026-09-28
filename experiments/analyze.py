@@ -602,9 +602,181 @@ def e8():
     json.dump(out, open(TAB / "E8_targeted.json", "w"), indent=1)
     print("\n".join(lines))
 
+def e9():
+    """Novelty check: ranking (objective vs top-k magnitude vs model-free bound) and
+    budget-adaptive resolution, against the E1 baselines on the same configuration."""
+    e1, e9r = load("E1"), load("E9")
+    if not e9r:
+        return
+    ref = raw_ssq(e1)
+    pts = defaultdict(list)   # (ds, variant, B) -> [(seed, bytes, ratio)]
+    for r in e1:
+        c = r["config"]
+        if c["method"] in ("fedcast", "kfed", "periodic", "pdelta"):
+            pts[(r["dataset"], "objective" if c["method"] == "fedcast" else c["method"], c["param"])].append(
+                (c["seed"], r["bytes_up"], ratio(r, ref)))
+    for r in e9r:
+        pts[(r["dataset"], r["tag"], r["config"]["param"])].append((r["config"]["seed"], r["bytes_up"], ratio(r, ref)))
+    VL = {"objective": "FedCAST (objective rank)", "norm": "top-k magnitude rank", "uniform": "model-free bound rank",
+          "aq": "FedCAST + adaptive resolution (q≥k)", "aq2": "FedCAST + adaptive resolution (q≥2k)",
+          "kfed": "k-FED", "periodic": "Periodic", "pdelta": "Periodic-Δ"}
+    VC = {"objective": COLOR["fedcast"], "norm": "#9467bd", "uniform": "#8c564b", "aq": "#ff7f0e", "aq2": "#e377c2",
+          "kfed": COLOR["kfed"], "periodic": COLOR["periodic"], "pdelta": COLOR["pdelta"]}
+    dsets = [d for d in DS_ORDER if any(k[0] == d for k in pts)]
+    fig, axes = plt.subplots(1, len(dsets), figsize=(2.5 * len(dsets), 2.6))
+    for j, ds in enumerate(dsets):
+        ax = axes[j]
+        for v in ["periodic", "kfed", "norm", "uniform", "aq", "aq2", "objective"]:
+            cur = sorted((np.mean([x[1] for x in vals]), np.mean([x[2] for x in vals]))
+                         for (d, vv, B), vals in pts.items() if d == ds and vv == v and B <= 150)
+            if not cur:
+                continue
+            ax.plot([c[0] / 1e3 for c in cur], np.minimum([c[1] for c in cur], 1.35), marker="o", ms=2.5,
+                    lw=1.5 if v in ("objective", "aq") else 0.9, color=VC[v], label=VL[v],
+                    ls="--" if v in ("norm", "uniform", "aq2") else "-")
+        ax.set_xscale("log")
+        ax.set_title(DS_LABEL[ds])
+        ax.set_xlabel("uplink kB (log)")
+        ax.grid(alpha=0.25, lw=0.5)
+    axes[0].set_ylabel("cost / Centralised-Raw (clipped 1.35)")
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.12))
+    fig.tight_layout(rect=(0, 0.1, 1, 1))
+    savefig(fig, "fig_novelty")
+
+    # paired test: objective vs each other ranking at equal budget (same seed, same B)
+    out = {}
+    lines = ["| Comparison | Data | pairs | objective better | median cost-ratio gain | one-sided Wilcoxon p |",
+             "|---|---|---|---|---|---|"]
+    for other in ["norm", "uniform"]:
+        for group, dl in [("drifting (SynDrift)", ["syndrift"]), ("static (4 real datasets)", ["nslkdd", "shuttle", "pendigits", "letter"]),
+                          ("all", dsets)]:
+            a, b = [], []
+            for (d, v, B), vals in pts.items():
+                if v != "objective" or d not in dl or B > 150:
+                    continue
+                o = {x[0]: x[2] for x in pts.get((d, other, B), [])}
+                for sd, _, rr in vals:
+                    if sd in o:
+                        a.append(rr)
+                        b.append(o[sd])
+            if len(a) >= 6:
+                a, b = np.array(a), np.array(b)
+                w = stats.wilcoxon(a, b, alternative="less")
+                out[f"objective_vs_{other}|{group}"] = dict(n=len(a), better=float((a < b).mean()),
+                                                           median_gain=float(np.median(b - a)), p=float(w.pvalue))
+                lines.append(f"| objective vs {other} | {group} | {len(a)} | {(a < b).mean()*100:.0f}% | "
+                             f"{np.median(b - a):+.4f} | {w.pvalue:.2g} |")
+    # savings including new variants
+    def need(ds, v, thr=1.05):
+        cur = sorted((np.mean([x[1] for x in vals]), np.mean([x[2] for x in vals]))
+                     for (d, vv, B), vals in pts.items() if d == ds and vv == v)
+        prev = None
+        for b1, r1 in cur:
+            if r1 <= thr:
+                if prev is None or prev[1] <= thr:
+                    return b1
+                w = (prev[1] - thr) / max(prev[1] - r1, 1e-12)
+                return math.exp(math.log(prev[0]) + w * (math.log(b1) - math.log(prev[0])))
+            prev = (b1, r1)
+        return float("nan")
+    lines += ["", "kB needed to reach cost ratio <= 1.05 (and <= 1.10)", "",
+              "| Data | objective | + adaptive q≥k | + adaptive q≥2k | top-k magnitude | model-free | k-FED | Periodic-Δ |",
+              "|---|---|---|---|---|---|---|---|"]
+    for ds in dsets:
+        cells = []
+        for v in ["objective", "aq", "aq2", "norm", "uniform", "kfed", "pdelta"]:
+            a5, a10 = need(ds, v, 1.05), need(ds, v, 1.10)
+            cells.append(("—" if math.isnan(a5) else f"{a5/1e3:.0f}") + " / " + ("—" if math.isnan(a10) else f"{a10/1e3:.0f}"))
+        lines.append(f"| {DS_LABEL[ds]} | " + " | ".join(cells) + " |")
+    (TAB / "E9_novelty.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / "E9_novelty.json", "w"), indent=1)
+    print("\n".join(lines))
+
+def e10():
+    """Objective vs magnitude vs model-free ranking on real evolving streams."""
+    rows = load("E10")
+    if not rows:
+        return
+    ref = raw_ssq(rows)
+    pts = defaultdict(list)
+    for r in rows:
+        if r["tag"] == "raw":
+            continue
+        pts[(r["dataset"], r["tag"], r["config"]["param"])].append((r["config"]["seed"], r["bytes_up"], ratio(r, ref)))
+    dsets = [d for d in DS_ORDER if any(k[0] == d for k in pts)]
+    VL = {"objective": "FedCAST (objective rank)", "norm": "top-k magnitude rank", "uniform": "model-free bound rank",
+          "aq2": "FedCAST + adaptive resolution", "kfed": "k-FED", "pdelta": "Periodic-Δ"}
+    VC = {"objective": COLOR["fedcast"], "norm": "#9467bd", "uniform": "#8c564b", "aq2": "#ff7f0e",
+          "kfed": COLOR["kfed"], "pdelta": COLOR["pdelta"]}
+    fig, axes = plt.subplots(1, len(dsets), figsize=(2.6 * len(dsets), 2.6))
+    for j, ds in enumerate(dsets):
+        for v in ["pdelta", "kfed", "uniform", "norm", "aq2", "objective"]:
+            cur = sorted((np.mean([x[1] for x in vals]), np.mean([x[2] for x in vals]))
+                         for (d, vv, B), vals in pts.items() if d == ds and vv == v)
+            if cur:
+                axes[j].plot([c[0] / 1e3 for c in cur], np.minimum([c[1] for c in cur], 1.35), marker="o", ms=2.5,
+                             color=VC[v], lw=1.5 if v == "objective" else 0.9,
+                             ls="--" if v in ("norm", "uniform") else "-", label=VL[v])
+        axes[j].set_xscale("log")
+        axes[j].set_title(DS_LABEL[ds] + " (evolving)")
+        axes[j].set_xlabel("uplink kB (log)")
+        axes[j].grid(alpha=0.25, lw=0.5)
+    axes[0].set_ylabel("cost / Centralised-Raw")
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=6, frameon=False, bbox_to_anchor=(0.5, -0.08))
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    savefig(fig, "fig_evolving")
+    out = {}
+    lines = ["| Comparison | Data | pairs | objective better | median cost-ratio gain | one-sided Wilcoxon p |",
+             "|---|---|---|---|---|---|"]
+    for other in ["norm", "uniform"]:
+        for group, dl in [(DS_LABEL[d], [d]) for d in dsets] + [("all 4 real evolving", dsets)]:
+            a, b = [], []
+            for (d, v, B), vals in pts.items():
+                if v != "objective" or d not in dl:
+                    continue
+                o = {x[0]: x[2] for x in pts.get((d, other, B), [])}
+                for sd, _, rr in vals:
+                    if sd in o:
+                        a.append(rr)
+                        b.append(o[sd])
+            if len(a) >= 6:
+                a, b = np.array(a), np.array(b)
+                w = stats.wilcoxon(a, b, alternative="less")
+                out[f"objective_vs_{other}|{group}"] = dict(n=len(a), better=float((a < b).mean()),
+                                                           median_gain=float(np.median(b - a)), p=float(w.pvalue))
+                lines.append(f"| objective vs {other} | {group} | {len(a)} | {(a < b).mean()*100:.0f}% | "
+                             f"{np.median(b - a):+.4f} | {w.pvalue:.2g} |")
+
+    def need(ds, v, thr):
+        cur = sorted((np.mean([x[1] for x in vals]), np.mean([x[2] for x in vals]))
+                     for (d, vv, B), vals in pts.items() if d == ds and vv == v)
+        prev = None
+        for b1, r1 in cur:
+            if r1 <= thr:
+                if prev is None or prev[1] <= thr:
+                    return b1
+                w = (prev[1] - thr) / max(prev[1] - r1, 1e-12)
+                return math.exp(math.log(prev[0]) + w * (math.log(b1) - math.log(prev[0])))
+            prev = (b1, r1)
+        return float("nan")
+    lines += ["", "kB needed to reach cost ratio <= 1.05 / <= 1.10 on evolving streams", "",
+              "| Data | objective | top-k magnitude | model-free | + adaptive res. | k-FED | Periodic-Δ |",
+              "|---|---|---|---|---|---|---|"]
+    for ds in dsets:
+        cells = []
+        for v in ["objective", "norm", "uniform", "aq2", "kfed", "pdelta"]:
+            a5, a10 = need(ds, v, 1.05), need(ds, v, 1.10)
+            cells.append(("—" if math.isnan(a5) else f"{a5/1e3:.0f}") + " / " + ("—" if math.isnan(a10) else f"{a10/1e3:.0f}"))
+        lines.append(f"| {DS_LABEL[ds]} | " + " | ".join(cells) + " |")
+    (TAB / "E10_evolving.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / "E10_evolving.json", "w"), indent=1)
+    print("\n".join(lines))
+
 
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "kafka"]
+    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "kafka"]
     for w in which:
         globals()[w]()
         print("done", w, flush=True)

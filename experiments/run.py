@@ -99,6 +99,24 @@ def experiments(seeds: int):
                + [(ds, v(BASE, method="fedcast", param=B, seed=s, links=["lan", "wan", "cellular", "poor"],
                          use_price=pr), f"price={pr}|B={B}")
                   for ds in ["syndrift", "nslkdd"] for B in (150, 500) for pr in (True, False) for s in S])
+    # E9 - novelty check: which *ranking* matters (objective vs top-k by magnitude vs
+    #      model-free bound) and budget-adaptive resolution; same base config as E1
+    variants = [("norm", {"rank": "norm"}), ("uniform", {"rank": "uniform"}),
+                ("aq", {"adaptive_q": True}), ("aq2", {"adaptive_q": True, "q_floor_k": 2.0})]
+    E["E9"] = ([(ds, v(BASE, method="fedcast", param=2, seed=s), "objective") for ds in DATASETS for s in S]
+               + [(ds, v(BASE, method="fedcast", param=B, seed=s, **kw), tag)
+                  for ds in DATASETS for tag, kw in variants for B in (2, 5, 10, 20, 50, 150) for s in S])
+    # E10 - does objective-aware ranking win on *real* evolving streams? (concept evolution
+    #       built from the four real datasets; same configuration as E1 otherwise)
+    EV = v(BASE, partition="evolve:0.3")
+    real = ["nslkdd", "shuttle", "pendigits", "letter"]
+    ranks = [("objective", {}), ("norm", {"rank": "norm"}), ("uniform", {"rank": "uniform"}),
+             ("aq2", {"adaptive_q": True, "q_floor_k": 2.0})]
+    E["E10"] = ([(ds, v(EV, method="raw", seed=s), "raw") for ds in real for s in S]
+                + [(ds, v(EV, method="fedcast", param=B, seed=s, **kw), tag)
+                   for ds in real for tag, kw in ranks for B in (2, 5, 10, 20, 50) for s in S]
+                + [(ds, v(EV, method=m, param=T, seed=s), m)
+                   for ds in real for m in ("kfed", "pdelta") for T in (30, 60, 120) for s in S])
     return E
 
 
@@ -139,8 +157,8 @@ def main():
         done = set()
         if out.exists():
             done = {json.loads(line)["key"] for line in out.open()}
-        keep = name in ("E3", "E8")
-        jobs = [(ds, cfg, tag, keep) for ds, cfg, tag in E[name] if _key(ds, cfg, tag) not in done]
+        jobs = [(ds, cfg, tag, name in ("E3", "E8") or (name == "E9" and ds == "syndrift"))
+                for ds, cfg, tag in E[name] if _key(ds, cfg, tag) not in done]
         # slow runs first for better load balancing
         jobs.sort(key=lambda j: (j[1].method != "raw", j[0] != "nslkdd"))
         print(f"{name}: {len(jobs)} runs to do ({len(done)} cached)", flush=True)
