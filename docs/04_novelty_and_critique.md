@@ -174,7 +174,7 @@ All summaries were applied, with 0 delivery errors, a median end-to-end latency 
 |---|---|---|
 | Research novelty | 6/10 | **7/10**: a principled, *exact* value-of-update criterion with a closed-form derivation, significant on real naturally drifting data (p = 2×10⁻⁶) and on all non-stationary streams (p = 4×10⁻¹¹) against the strongest FL baseline |
 | Evidence quality | synthetic and shuffled benchmarks, one machine | real drifting and naturally partitioned datasets, quantisation-fair baselines, multi-container deployment with kernel bandwidth caps |
-| Honest limits | — | ties top-k on static streams; Gas stays above 1.10 for every method; delay and loss not kernel-emulated; single-seed deployment runs; k known |
+| Honest limits | — | ties top-k on static streams; **k-FED still owns the very-low-byte end on Gas and CoverType** (fig_v3); Gas stays above 1.10 for every method; delay and loss not kernel-emulated; single-seed deployment runs; k known |
 
 **The claim a paper can now defend:** *For federated clustering of **evolving** streams under a byte budget, the value of an update is its exact reduction of the server's Lloyd excess cost. Communicating by value, rather than by change magnitude (the federated-learning standard) or by schedule (periodic, k-FED), significantly improves quality per byte on synthetic, evolving and naturally drifting real streams, and is on par on static ones.*
 
