@@ -946,6 +946,7 @@ def e13(extra: str | None = None, main: str = "fedcast-v2", tag_out: str = "E13_
         a.set_xscale("log")
         a.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         a.set_title(f"{DS_LABEL.get(ds, ds)} ({st})", fontsize=7.5)
+        a.set_xlabel("uplink kB (log)", fontsize=6.5)
         a.grid(alpha=0.25, lw=0.5)
     for a in axes[n:]:
         a.axis("off")
@@ -1022,8 +1023,10 @@ def e13(extra: str | None = None, main: str = "fedcast-v2", tag_out: str = "E13_
         lines += ["", f"Friedman over {len(blocks)} blocks where all four are feasible: mean ranks "
                   + ", ".join(f"{TL[t]} {r:.2f}" for t, r in zip(TAGS, ranks)) + f"; chi2 = {chi:.1f}, p = {p:.2g}, "
                   f"Nemenyi CD = {cd:.2f}"]
-        cd_diagram_generic(dict(zip([TL[t] for t in TAGS], ranks)), cd, fig_name.replace("fig_", "fig_cd_"),
-                           {TL[t]: TC[t] for t in TAGS})
+        SHORT = {"fedcast-v2": "FedCAST-v2", "fedcast-v3": "FedCAST-v3", "topk-q": "Top-k + 8-bit",
+                 "pdelta-q": "Periodic-Δ + 8-bit", "kfed-q": "k-FED + 8-bit"}
+        cd_diagram_generic(dict(zip([SHORT[t] for t in TAGS], ranks)), cd, fig_name.replace("fig_", "fig_cd_"),
+                           {SHORT[t]: TC[t] for t in TAGS})
     # ---- paired: FedCAST-v2 vs top-k (same budget, seed)
     lines += ["", f"| Setting group | pairs | {main} better than top-k+8-bit | mean gain | one-sided Wilcoxon p |",
               "|---|---|---|---|---|"]
@@ -1056,8 +1059,8 @@ def e14():
 def cd_diagram_generic(ranks: dict, cd: float, name: str, colors: dict):
     items = sorted(ranks.items(), key=lambda kv: kv[1])
     k = len(items)
-    fig, ax = plt.subplots(figsize=(4.2, 1.3))
-    ax.set_xlim(0.7, k + 0.3)
+    fig, ax = plt.subplots(figsize=(4.6, 1.4))
+    ax.set_xlim(-0.6, k + 1.6)
     ax.set_ylim(0, 1.25)
     ax.axis("off")
     ax.hlines(0.8, 1, k, color="k", lw=0.8)
@@ -1065,9 +1068,12 @@ def cd_diagram_generic(ranks: dict, cd: float, name: str, colors: dict):
         ax.vlines(r, 0.78, 0.82, color="k", lw=0.8)
         ax.text(r, 0.9, str(r), ha="center", fontsize=7)
     for i, (m, r) in enumerate(items):
-        y = 0.55 - 0.15 * (i % 4)
-        ax.plot([r, r], [0.8, y], color=colors[m], lw=0.8)
-        ax.text(r, y - 0.07, f"{m} ({r:.2f})", ha="center", fontsize=6, color=colors[m])
+        y = 0.6 - 0.17 * i
+        left = i < (k + 1) // 2
+        x_end = 0.75 if left else k + 0.25
+        ax.plot([r, r, x_end], [0.8, y, y], color=colors[m], lw=0.8)
+        ax.text(x_end + (-0.03 if left else 0.03), y, f"{m} ({r:.2f})", ha="right" if left else "left",
+                va="center", fontsize=6.5, color=colors[m])
     ax.hlines(1.1, 1, 1 + cd, color="k", lw=1.5)
     ax.text(1 + cd / 2, 1.15, f"CD = {cd:.2f}", ha="center", fontsize=6.5)
     savefig(fig, name)
