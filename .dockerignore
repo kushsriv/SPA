@@ -1,0 +1,6 @@
+.kafka
+.venv
+results
+paper
+docs
+**/__pycache__

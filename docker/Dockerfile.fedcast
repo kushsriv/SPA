@@ -1,0 +1,10 @@
+# FedCAST runtime image (built offline: wheels and datasets are copied in)
+FROM python:3.11-slim
+COPY docker/wheels /wheels
+RUN pip install --no-cache-dir --no-index --find-links /wheels numpy scipy scikit-learn confluent-kafka pandas \
+    && rm -rf /wheels
+WORKDIR /app
+COPY src /app/src
+COPY data/raw /app/data/raw
+ENV PYTHONPATH=/app/src PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1
+ENTRYPOINT ["python", "-m", "fedcast.cli"]

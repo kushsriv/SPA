@@ -29,10 +29,12 @@ class Dataset:
     y: np.ndarray
     u: np.ndarray | None = None      # optional time fraction in [0, 1] per point
     class_names: list[str] | None = None
+    groups: np.ndarray | None = None  # optional natural device id per point (partition "natural")
+    k_override: int | None = None     # number of clusters when labels do not define it
 
     @property
     def k(self) -> int:
-        return int(len(np.unique(self.y)))
+        return int(self.k_override or len(np.unique(self.y)))
 
 
 def _fetch(url: str, name: str) -> bytes:
@@ -136,6 +138,64 @@ def synthetic(n: int = 60000, k: int = 15, d: int = 10, seed: int = 0, sep: floa
     return Dataset("syndrift", X, y, u=u)
 
 
+# ---------------------------------------------------------------- real drifting streams
+INTEL_URL = "https://raw.githubusercontent.com/linsea423/Intel_Lab_Data/master/data.zip"
+GAS_URL = "https://raw.githubusercontent.com/HakanKARASU/Gas-Sensor-Array-Drift-Dataset/main/gas_sensor_data.csv"
+COVTYPE_URL = "https://raw.githubusercontent.com/vlosing/driftDatasets/master/realWorld/covType/covType.arff"
+
+
+def _subsample_ordered(n: int, max_points: int) -> np.ndarray:
+    return np.arange(n) if n <= max_points else np.linspace(0, n - 1, max_points).astype(int)
+
+
+def intel_lab(max_points: int = 60000, k: int = 8) -> Dataset:
+    """Intel Berkeley Research Lab: 54 motes, 5 weeks, temperature/humidity/light/voltage.
+    Naturally partitioned (by mote) and naturally drifting (daily cycles, battery decay,
+    sensor faults). Unlabelled: evaluated with the k-means objective only."""
+    import zipfile
+    import pandas as pd
+    raw = _fetch(INTEL_URL, "intel_data.zip")
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        df = pd.read_csv(z.open("data.txt"), sep=r"\s+", header=None, on_bad_lines="skip",
+                         names=["date", "time", "epoch", "mote", "temp", "hum", "light", "volt"])
+    df = df.dropna()
+    df = df[(df.mote >= 1) & (df.mote <= 54) & df.temp.between(-10, 60) & df.hum.between(0, 100)
+            & df.light.between(0, 3000) & df.volt.between(2.0, 3.3)]
+    ts = pd.to_datetime(df.date + " " + df.time, errors="coerce", format="mixed")
+    df = df.assign(ts=ts).dropna(subset=["ts"]).sort_values("ts")
+    idx = _subsample_ordered(len(df), max_points)
+    df = df.iloc[idx]
+    X = _standardise(np.column_stack([df.temp, df.hum, np.log1p(df.light), df.volt]))
+    t = (df.ts - df.ts.iloc[0]).dt.total_seconds().to_numpy()
+    u = t / max(t[-1], 1.0)
+    return Dataset("intel", X, np.zeros(len(df), int), u=u, groups=df.mote.to_numpy().astype(int), k_override=k)
+
+
+def gas_drift(max_points: int = 60000) -> Dataset:
+    """UCI Gas Sensor Array Drift (36 months, 10 batches, 6 gases, 128 features) in natural order."""
+    import pandas as pd
+    df = pd.read_csv(io.BytesIO(_fetch(GAS_URL, "gas_sensor_data.csv")))
+    df = df.iloc[_subsample_ordered(len(df), max_points)]
+    F = df[[c for c in df.columns if c.startswith("feature_")]].to_numpy(float)
+    X = _standardise(np.sign(F) * np.log1p(np.abs(F)))
+    _, y = np.unique(df.gas_label.to_numpy(), return_inverse=True)
+    u = np.arange(len(df)) / max(len(df) - 1, 1)
+    return Dataset("gas", X, y, u=u)
+
+
+def covtype_natural(max_points: int = 60000) -> Dataset:
+    """Forest CoverType in its original order (a standard real concept-drift stream)."""
+    raw = _fetch(COVTYPE_URL, "covType.arff").decode(errors="ignore")
+    body = raw[raw.lower().index("@data") + 5:]
+    rows = [r for r in body.strip().splitlines() if r and not r.startswith("%")]
+    idx = _subsample_ordered(len(rows), max_points)
+    A = np.array([[float(v) for v in rows[i].split(",")] for i in idx])
+    X = _standardise(A[:, :-1])
+    _, y = np.unique(A[:, -1], return_inverse=True)
+    u = np.arange(len(idx)) / max(len(idx) - 1, 1)
+    return Dataset("covtype", X, y, u=u)
+
+
 def load(name: str, seed: int = 0, max_points: int | None = None) -> Dataset:
     if name in ("synthetic", "syndrift"):
         ds = synthetic(seed=seed)
@@ -143,6 +203,12 @@ def load(name: str, seed: int = 0, max_points: int | None = None) -> Dataset:
         ds = nslkdd()
     elif name in ("shuttle", "pendigits", "letter"):
         ds = pmlb(name)
+    elif name == "intel":
+        return intel_lab(max_points or 60000)
+    elif name == "gas":
+        return gas_drift(max_points or 60000)
+    elif name == "covtype":
+        return covtype_natural(max_points or 60000)
     else:
         raise ValueError(f"unknown dataset {name}")
     if max_points and len(ds.y) > max_points:

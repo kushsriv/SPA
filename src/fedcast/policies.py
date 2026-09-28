@@ -202,6 +202,58 @@ def _per_mc_simple(node, now: float, slots, dels, rank: str):
     return slots, e_s, dels, e_d, 0.0
 
 
+def _per_mc_lloyd(node, now: float, slots, dels, centers: np.ndarray, weights: np.ndarray,
+                  with_assignment: bool = False):
+    """Exact value of an update: the reduction of the server's Lloyd excess cost.
+
+    With assignments fixed, the server's centre for cluster j is c_j = L^_j / N^_j, while
+    the true centroid is (L^_j + dL_j) / (N^_j + dN_j). The k-means cost of cluster j at
+    the server's centre exceeds its optimum by exactly
+
+        excess_j = || dL_j - dN_j c_j ||^2 / N_j        (N_j: global mass of cluster j)
+
+    The node knows c_j and N_j (broadcast), and its own contribution r_j to dL_j - dN_j c_j.
+    Sending micro-cluster id removes its contribution u_id from r_j, reducing the excess by
+    (2 u_id . r_j - ||u_id||^2) / N_j: its marginal value. Growth of a cluster in place
+    (dLS ~ dn * c_j) is worth ~0; new mass far from every centre is worth a lot.
+    with_assignment adds |dJ_id| (the cost change at the current centres, same units).
+    """
+    (n1, L1, S1), (n0, L0, S0), (nd, Ld, Sd) = _cf_pairs(node, now, slots, dels)
+    k, d = centers.shape
+    N = np.maximum(np.asarray(weights, float), 1e-9)
+
+    def lab_of(n, L):
+        if len(n) == 0:
+            return np.zeros(0, int)
+        return sqdist(L / np.maximum(n, 1e-12)[:, None], centers).argmin(1)
+    has = n0 > 0
+    a1, a0, ad = lab_of(n1, L1), np.zeros(len(n0), int), lab_of(nd, Ld)
+    if has.any():
+        a0[has] = lab_of(n0[has], L0[has])
+    # per-slot contributions (up to two clusters touched) and per-deletion contributions
+    U1 = L1 - n1[:, None] * centers[a1]                 # current copy, in its cluster
+    U0 = np.where(has[:, None], L0 - n0[:, None] * centers[a0], 0.0)   # server copy
+    Ud = -(Ld - nd[:, None] * centers[ad]) if len(nd) else np.zeros((0, d))
+    r = np.zeros((k, d))
+    np.add.at(r, a1, U1)
+    np.add.at(r, a0, -U0)
+    if len(nd):
+        np.add.at(r, ad, Ud)
+
+    def gain(j, u):
+        return (2.0 * (u * r[j]).sum(-1) - (u * u).sum(-1)) / N[j]
+    same = a1 == a0
+    u_same = U1 - U0
+    e_s = np.where(same, gain(a1, u_same), gain(a1, U1) + gain(a0, -U0) * has)
+    e_d = gain(ad, Ud) if len(nd) else np.zeros(0)
+    e_s, e_d = np.maximum(e_s, 0.0), np.maximum(e_d, 0.0)
+    if with_assignment:
+        cst = lambda n, L, S: cf_cost(n, L, S, centers).min(1) if len(n) else np.zeros(0)
+        e_s = e_s + np.abs(cst(n1, L1, S1) - np.where(has, cst(np.where(has, n0, 1.0), L0, S0), 0.0))
+        e_d = e_d + cst(nd, Ld, Sd)
+    return slots, e_s, dels, e_d, 0.0
+
+
 # ---------------------------------------------------------------- FedCAST
 class FedCAST(Policy):
     """Budget-constrained, link-aware, objective-linked send policy.
@@ -246,13 +298,20 @@ class FedCAST(Policy):
         from .codec import KAFKA_RECORD_OVERHEAD, summary_size
         self._refill(node, now)
         g = node.global_model
-        if g is None and self.rank in ("objective", "hybrid"):  # bootstrap: the server has no model yet
+        if g is None and self.rank in ("objective", "hybrid", "lloyd", "lloydj"):  # bootstrap: the server has no model yet
             size = node.pending_bytes(full=True)
             ok = size > 0 and not node.sent and ((not self.use_bucket) or self.tokens >= size)
             return Decision(full=True) if ok else None
-        slots, e_s, dels, e_d, novelty = per_mc_staleness(
-            node, now, g.centers if g is not None else None, g.radii if g is not None else None,
-            self.rho, self.far_factor, rank=self.rank)
+        if self.rank in ("lloyd", "lloydj"):
+            slots, dels = node.dirty()
+            if not slots and not dels:
+                return None
+            slots, e_s, dels, e_d, novelty = _per_mc_lloyd(node, now, slots, dels, g.centers, g.weights,
+                                                           with_assignment=self.rank == "lloydj")
+        else:
+            slots, e_s, dels, e_d, novelty = per_mc_staleness(
+                node, now, g.centers if g is not None else None, g.radii if g is not None else None,
+                self.rho, self.far_factor, rank=self.rank)
         if not slots and not dels:
             return None
         delta = float(e_s.sum() + e_d.sum())
@@ -269,7 +328,7 @@ class FedCAST(Policy):
             cnt = min(cnt, len(order))
             chosen = [slots[i] for i in order[:cnt]]
             covered = float(cum[cnt - 1] if cnt else 0.0) + float(e_d.sum())
-            size = summary_size(len(chosen), len(dels), node.dim) + KAFKA_RECORD_OVERHEAD
+            size = node.summary_bytes(len(chosen), len(dels))
             if not chosen and not dels:
                 return None
         affordable = (not self.use_bucket) or self.tokens >= size
@@ -468,7 +527,7 @@ class FedCASTMR(FedCAST):
             return None
         if self.k_local is None:
             self.k_local = self._pick_r(node, now)
-        size = summary_size(self.k_local, 0, node.dim) + KAFKA_RECORD_OVERHEAD
+        size = node.summary_bytes(self.k_local, 0)
         affordable = (not self.use_bucket) or self.tokens >= size
         g = node.global_model
         if g is None:
@@ -482,7 +541,7 @@ class FedCASTMR(FedCAST):
             self.lam = max(score, 1e-12)
         if score >= self.lam and affordable:
             self.k_local = self._pick_r(node, now)   # refresh resolution at send time
-            new_size = summary_size(self.k_local, 0, node.dim) + KAFKA_RECORD_OVERHEAD
+            new_size = node.summary_bytes(self.k_local, 0)
             if (not self.use_bucket) or self.tokens >= new_size:
                 return Decision(kfed=True)
         return None

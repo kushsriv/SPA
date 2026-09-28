@@ -124,6 +124,27 @@ def experiments(seeds: int):
                  for ds in DATASETS for B in (2, 5, 10, 20, 50, 150) for s in S]
                 + [(ds, v(EV, method="fedcast", param=B, seed=s, **H), "hybrid")
                    for ds in real for B in (2, 5, 10, 20, 50) for s in S])
+    # E12 - exact-value ranking (Lloyd excess) on every setting of E9/E10/E11
+    L = {"rank": "lloyd"}
+    E["E12"] = ([(ds, v(BASE, method="fedcast", param=B, seed=s, **L), "lloyd")
+                 for ds in DATASETS for B in (2, 5, 10, 20, 50, 150) for s in S]
+                + [(ds, v(EV, method="fedcast", param=B, seed=s, **L), "lloyd")
+                   for ds in real for B in (2, 5, 10, 20, 50) for s in S])
+    # E13 - combined evaluation of FedCAST-v2 (exact-value ranking + 8-bit deltas with error
+    #       feedback) against every compressible baseline given the same quantisation, on static,
+    #       evolving and *naturally* drifting / partitioned real streams
+    Q = {"quant": True}
+    settings = ([(ds, BASE) for ds in DATASETS] + [(ds, EV) for ds in real]
+                + [("gas", BASE), ("covtype", BASE), ("intel", v(BASE, partition="natural"))])
+    E["E13"] = []
+    for ds, base in settings:
+        E["E13"] += [(ds, v(base, method="raw", seed=s), "raw") for s in S]
+        E["E13"] += [(ds, v(base, method="fedcast", param=B, seed=s, rank="lloyd", **Q), "fedcast-v2")
+                     for B in (2, 5, 10, 20, 50) for s in S]
+        E["E13"] += [(ds, v(base, method="fedcast", param=B, seed=s, rank="norm", **Q), "topk-q")
+                     for B in (2, 5, 10, 20, 50) for s in S]
+        E["E13"] += [(ds, v(base, method=m, param=T, seed=s, **Q), f"{m}-q")
+                     for m in ("pdelta", "kfed") for T in (30, 60, 120, 240) for s in S]
     return E
 
 

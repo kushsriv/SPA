@@ -8,6 +8,8 @@ Schemes (spec strings):
   drift:K          exclusive:K in the first half; in the second half every node
                    switches to the classes of the next node (sudden drift)
   quantity:A       iid content but node rates follow a power law with exponent A
+  natural          the dataset's own device ids (e.g. sensor motes), grouped into m
+                   contiguous blocks of ids (spatial zones for Intel Lab)
   evolve:A         dirichlet:A split, and the stream *evolves*: every class c gets a
                    birth time b_c (a few classes at 0, the rest uniform in [0, 0.6]) and
                    its points arrive only after b_c (concept evolution / emerging
@@ -31,7 +33,7 @@ def _times(u: np.ndarray, duration: float) -> np.ndarray:
 
 
 def partition(y: np.ndarray, m: int, spec: str, duration: float, seed: int = 0,
-              u: np.ndarray | None = None) -> list[NodeStream]:
+              u: np.ndarray | None = None, groups: np.ndarray | None = None) -> list[NodeStream]:
     rng = np.random.default_rng(seed)
     n = len(y)
     classes = np.unique(y)
@@ -49,7 +51,13 @@ def partition(y: np.ndarray, m: int, spec: str, duration: float, seed: int = 0,
         u = rng.uniform(0, 1, n)
     owner = np.empty(n, dtype=int)
 
-    if kind == "iid" or kind == "quantity":
+    if kind == "natural":
+        if groups is None:
+            raise ValueError("partition 'natural' needs device ids (Dataset.groups)")
+        ug = np.unique(groups)
+        block = {g: i * m // len(ug) for i, g in enumerate(ug)}
+        owner = np.array([block[g] for g in groups])
+    elif kind == "iid" or kind == "quantity":
         if kind == "quantity":
             a = float(arg or 1.0)
             p = 1.0 / np.arange(1, m + 1) ** a

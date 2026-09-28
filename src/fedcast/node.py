@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .codec import KAFKA_RECORD_OVERHEAD, KIND_DELTA, KIND_FULL, GlobalModel, Summary, summary_size
+from .codec import (KAFKA_RECORD_OVERHEAD, KIND_DELTA, KIND_FULL, GlobalModel, Summary, summary_size,
+                    summary_size_q)
 from .microcluster import MCParams, MicroClusterModel, decay_factor
 
 
@@ -33,6 +34,7 @@ class EdgeNode:
         self.wire_up = 0
         self.msgs_up = 0
         self.bytes_down = 0
+        self.quant = False   # quantised wire format (set by the runtime)
 
     # ------------------------------------------------------------------ data
     def ingest(self, x: np.ndarray, now: float) -> None:
@@ -72,16 +74,20 @@ class EdgeNode:
         f = decay_factor(now, t, self.params.half_life)
         return ids, n * f, LS * f[:, None], SS * f
 
+    def summary_bytes(self, n_up: int, n_del: int) -> int:
+        f = summary_size_q if self.quant else summary_size
+        return f(n_up, n_del, self.dim) + KAFKA_RECORD_OVERHEAD
+
     def pending_bytes(self, full: bool = False) -> int:
         if full:
-            return summary_size(int(self.mc.active.sum()), 0, self.dim) + KAFKA_RECORD_OVERHEAD
+            return self.summary_bytes(int(self.mc.active.sum()), 0)
         slots, dels = self.dirty()
         if not slots and not dels:
             return 0
-        return summary_size(len(slots), len(dels), self.dim) + KAFKA_RECORD_OVERHEAD
+        return self.summary_bytes(len(slots), len(dels))
 
     def full_bytes_max(self) -> int:
-        return summary_size(self.params.max_mc, 0, self.dim) + KAFKA_RECORD_OVERHEAD
+        return self.summary_bytes(self.params.max_mc, 0)
 
     def link_price(self) -> float:
         return self.price_overhead * (1.0 + self.price_latency / self.latency_ref)

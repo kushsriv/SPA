@@ -74,19 +74,24 @@ class EdgeRunConfig:
     eval_window: float = 60.0
     out: str = "results/kafka_edges.json"
     sim: SimConfig = field(default_factory=SimConfig)
+    node_ids: list[int] | None = None   # run only these nodes (one container per node)
+    start_at: float = 0.0               # shared wall-clock start (epoch s) across containers
 
 
 def run_edges(rc: EdgeRunConfig) -> dict:
     cfg = rc.sim
     ds = load(rc.dataset, seed=cfg.seed, max_points=rc.max_points)
-    streams = partition(ds.y, cfg.nodes, cfg.partition, cfg.duration, cfg.seed, ds.u)
+    streams = partition(ds.y, cfg.nodes, cfg.partition, cfg.duration, cfg.seed, ds.u, ds.groups)
     d = ds.X.shape[1]
     raw_mode = cfg.method == "raw"
     nodes = [EdgeNode(i, d, cfg.mc, make_policy(cfg, max(1, len(np.unique(ds.y[s.idx])))))
              for i, s in enumerate(streams)]
-    stats = [dict() for _ in nodes]
-    producers = [_producer(rc.bootstrap, stats[i], **({"linger.ms": 20} if raw_mode else {}))
-                 for i in range(len(nodes))]
+    for nd in nodes:
+        nd.quant = cfg.quant
+    active = list(rc.node_ids) if rc.node_ids is not None else list(range(len(nodes)))
+    stats = {i: dict() for i in active}
+    producers = {i: _producer(rc.bootstrap, stats[i], **({"linger.ms": 20} if raw_mode else {}))
+                 for i in active}
     latencies: list[float] = []
     errors = [0]
 
@@ -113,7 +118,11 @@ def run_edges(rc: EdgeRunConfig) -> dict:
     next_eval = rc.eval_period
     latest_global = None
     global_recv_lat = []
-    start = time.time()
+    if rc.start_at > 0:
+        time.sleep(max(0.0, rc.start_at - time.time()))
+        start = rc.start_at
+    else:
+        start = time.time()
     t = 0.0
     while t < cfg.duration - 1e-9:
         t = round(t + cfg.tick, 9)
@@ -126,11 +135,12 @@ def run_edges(rc: EdgeRunConfig) -> dict:
             g = codec.decode_global(msg.value())
             nb = len(msg.value()) + codec.KAFKA_RECORD_OVERHEAD
             latest_global = g
-            for nd in nodes:
-                nd.on_global(g, nb)
+            for i in active:
+                nodes[i].on_global(g, nb)
             ts = msg.timestamp()[1] / 1000.0
             global_recv_lat.append(time.time() - ts)
-        for i, nd in enumerate(nodes):
+        for i in active:
+            nd = nodes[i]
             s = streams[i]
             j0, j1 = pos[i], int(np.searchsorted(s.times, t, side="right"))
             pos[i] = j1
@@ -157,7 +167,11 @@ def run_edges(rc: EdgeRunConfig) -> dict:
             if dec is not None:
                 summ = (nd.build_kfed(t, nd.policy.k_local, kfed_rng) if dec.kfed
                         else nd.build(t, full=dec.full, only_slots=dec.only_slots))
-                buf = codec.encode_summary(summ)
+                if cfg.quant:
+                    buf = codec.encode_summary_q(summ)
+                    summ = codec.decode_summary(buf)   # error feedback
+                else:
+                    buf = codec.encode_summary(summ)
                 payload = len(buf) + codec.KAFKA_RECORD_OVERHEAD
                 nd.commit(summ, payload)
                 while True:
@@ -168,7 +182,7 @@ def run_edges(rc: EdgeRunConfig) -> dict:
                     except BufferError:
                         producers[i].poll(0.01)
             producers[i].poll(0)
-        if t + 1e-9 >= next_eval:
+        if t + 1e-9 >= next_eval and rc.node_ids is None:
             next_eval += rc.eval_period
             lo = int(np.searchsorted(all_t, t - rc.eval_window, side="right"))
             hi = int(np.searchsorted(all_t, t, side="right"))
@@ -181,20 +195,21 @@ def run_edges(rc: EdgeRunConfig) -> dict:
                 series.append(r)
                 print(f"[edges] t={t:6.0f}s ARI={r['ari']:.3f} bytes={r['bytes']/1e3:8.1f}kB "
                       f"model v{latest_global.version}", flush=True)
-    for p in producers:
+    for p in producers.values():
         p.flush(30)
     time.sleep(1.2)  # let the last statistics callbacks fire
-    for p in producers:
+    for p in producers.values():
         p.poll(0)
     gcons.close()
     lat = np.array(latencies) if latencies else np.zeros(1)
     res = {
         "method": cfg.method, "param": cfg.param, "dataset": rc.dataset, "nodes": cfg.nodes,
         "speed": rc.speed, "wall_seconds": time.time() - start,
-        "bytes_up_estimate": float(sum(n.bytes_up for n in nodes)),
-        "kafka_txmsg_bytes": float(sum(s.get("txmsg_bytes", 0) for s in stats)),
-        "kafka_tx_bytes": float(sum(s.get("tx_bytes", 0) for s in stats)),
-        "msgs_up": int(sum(n.msgs_up for n in nodes)),
+        "node_ids": active,
+        "bytes_up_estimate": float(sum(nodes[i].bytes_up for i in active)),
+        "kafka_txmsg_bytes": float(sum(s.get("txmsg_bytes", 0) for s in stats.values())),
+        "kafka_tx_bytes": float(sum(s.get("tx_bytes", 0) for s in stats.values())),
+        "msgs_up": int(sum(nodes[i].msgs_up for i in active)),
         "delivery_errors": errors[0],
         "produce_latency_ms_p50": float(np.percentile(lat, 50) * 1000),
         "produce_latency_ms_p95": float(np.percentile(lat, 95) * 1000),
@@ -223,6 +238,7 @@ class CoordRunConfig:
     idle_exit: float = 0.0            # exit after this many idle wall seconds (0: never)
     out: str = "results/kafka_coordinator.json"
     stop_file: str = ""
+    history: str = ""                 # append every global model (JSON lines) for offline evaluation
 
 
 class KafkaCoordinator:
@@ -280,7 +296,15 @@ class KafkaCoordinator:
             c.close()
             self.restored_nodes = len(self.core.nodes)
         # resume: committed group offsets, else the changelog's offsets, else the beginning
-        committed = self.cons.committed([TopicPartition(self.topic, p) for p in self.parts], timeout=10)
+        committed = None
+        for attempt in range(30):   # a fresh broker may not have its group coordinator ready yet
+            try:
+                committed = self.cons.committed([TopicPartition(self.topic, p) for p in self.parts], timeout=10)
+                break
+            except KafkaException:
+                time.sleep(min(1.0 + attempt, 5.0))
+        if committed is None:
+            raise RuntimeError("group coordinator not available")
         assign = []
         for tp in committed:
             off = snap_offsets.get(tp.partition, tp.offset if tp.offset >= 0 else 0)
@@ -352,13 +376,17 @@ class KafkaCoordinator:
             if noww - last_agg >= self.rc.agg_every:
                 last_agg = noww
                 g = self.core.aggregate(self.now)
+                if g is not None and self.rc.history:
+                    with open(self.rc.history, "a") as hf:
+                        hf.write(json.dumps({"version": g.version, "t": g.time, "wall": noww,
+                                             "centers": g.centers.tolist()}) + "\n")
                 if g is not None:
                     self.prod.produce(T_GLOBAL, key=b"model", value=codec.encode_global(g))
                     self.prod.poll(0)
             if noww - last_ck >= self.rc.checkpoint_every:
                 last_ck = noww
                 self.checkpoint()
-            if self.rc.idle_exit and noww - last_msg > self.rc.idle_exit:
+            if self.rc.idle_exit and self.e2e and noww - last_msg > self.rc.idle_exit:
                 break
         self.checkpoint()
         e2e = np.array(self.e2e) if self.e2e else np.zeros(1)

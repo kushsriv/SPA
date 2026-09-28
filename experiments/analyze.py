@@ -25,9 +25,10 @@ TAB = RES / "tables"
 FIG.mkdir(parents=True, exist_ok=True)
 TAB.mkdir(parents=True, exist_ok=True)
 
-DS_ORDER = ["syndrift", "nslkdd", "shuttle", "pendigits", "letter"]
+DS_ORDER = ["syndrift", "nslkdd", "shuttle", "pendigits", "letter", "gas", "covtype", "intel"]
 DS_LABEL = {"syndrift": "SynDrift", "nslkdd": "NSL-KDD", "shuttle": "Shuttle",
-            "pendigits": "Pen-Digits", "letter": "Letter"}
+            "pendigits": "Pen-Digits", "letter": "Letter", "gas": "Gas-Drift", "covtype": "CoverType",
+            "intel": "Intel-Lab"}
 METHODS = ["fedcast", "periodic", "pdelta", "kfed", "change", "norm", "naive", "raw"]
 M_LABEL = {"fedcast": "FedCAST (ours)", "periodic": "Periodic", "pdelta": "Periodic-Δ",
            "kfed": "k-FED", "change": "Change-Thr.", "norm": "Norm-Trigger", "naive": "Naive",
@@ -840,9 +841,235 @@ def e11():
     json.dump({"tests": tests}, open(TAB / "E11_hybrid.json", "w"), indent=1)
     print("\n".join(lines))
 
+def e12():
+    """Exact-value (Lloyd excess) ranking vs objective vs top-k magnitude, paired."""
+    e1, e9, e10, e12r = load("E1"), load("E9"), load("E10"), load("E12")
+    if not e12r:
+        return
+    ref = raw_ssq(e1 + e10)
+    val = defaultdict(dict)
+
+    def setting(r):
+        if r["config"]["partition"].startswith("evolve"):
+            return "evolving real"
+        return "drifting (SynDrift)" if r["dataset"] == "syndrift" else "static real"
+
+    def add(r, rank):
+        c = r["config"]
+        if c["method"] != "fedcast" or c.get("adaptive_q") or c.get("quant"):
+            return
+        val[(setting(r), r["dataset"], c["param"], c["seed"])][rank] = ratio(r, ref)
+    for r in e1:
+        add(r, "objective")
+    for r in e9 + e10:
+        if r["tag"] in ("objective", "norm"):
+            add(r, r["tag"])
+    for r in e12r:
+        add(r, "lloyd")
+    lines = ["| Setting | lloyd vs | pairs | lloyd better | mean gain | median gain | one-sided Wilcoxon p |",
+             "|---|---|---|---|---|---|---|"]
+    out = {}
+    for setg in ["static real", "drifting (SynDrift)", "evolving real", "non-stationary (drift + evolving)", "all"]:
+        for other in ["norm", "objective"]:
+            a, b = [], []
+            for key, d in val.items():
+                ok = (setg == "all" or key[0] == setg
+                      or (setg.startswith("non-stationary") and key[0] in ("drifting (SynDrift)", "evolving real")))
+                if ok and "lloyd" in d and other in d:
+                    a.append(d["lloyd"])
+                    b.append(d[other])
+            if len(a) >= 6:
+                a, b = np.array(a), np.array(b)
+                w = stats.wilcoxon(a, b, alternative="less")
+                out[f"{setg}|{other}"] = dict(n=len(a), better=float((a < b).mean()), mean_gain=float(np.mean(b - a)),
+                                              p=float(w.pvalue))
+                lines.append(f"| {setg} | {other} | {len(a)} | {(a < b).mean()*100:.0f}% | {np.mean(b - a):+.4f} | "
+                             f"{np.median(b - a):+.4f} | {w.pvalue:.2g} |")
+    per_ds = ["", "| Dataset / setting | lloyd | objective | top-k magnitude | excess reduction vs magnitude |", "|---|---|---|---|---|"]
+    groups = defaultdict(lambda: defaultdict(list))
+    for key, d in val.items():
+        if {"lloyd", "objective", "norm"} <= set(d):
+            for k2 in ("lloyd", "objective", "norm"):
+                groups[(key[0], key[1])][k2].append(d[k2])
+    for (setg, ds), g in sorted(groups.items()):
+        L, O, N = np.mean(g["lloyd"]), np.mean(g["objective"]), np.mean(g["norm"])
+        red = 1 - (L - 1) / (N - 1) if N > 1 else float("nan")
+        per_ds.append(f"| {DS_LABEL.get(ds, ds)} ({setg}) | {L:.4f} | {O:.4f} | {N:.4f} | {red*100:.0f}% |")
+    (TAB / "E12_lloyd.md").write_text("\n".join(lines + per_ds) + "\n")
+    json.dump(out, open(TAB / "E12_lloyd.json", "w"), indent=1)
+    print("\n".join(lines + per_ds))
+
+def e13():
+    """Combined evaluation: FedCAST-v2 vs quantised baselines on static, evolving and natural streams."""
+    rows = load("E13")
+    if not rows:
+        return
+    ref = raw_ssq(rows)
+
+    def setting(r):
+        pt = r["config"]["partition"]
+        if pt.startswith("evolve"):
+            return "evolving"
+        if r["dataset"] in ("gas", "covtype", "intel"):
+            return "natural"
+        return "drifting" if r["dataset"] == "syndrift" else "static"
+    pts = defaultdict(list)       # (setting, ds, tag, param) -> [(seed, bytes, ratio)]
+    rawb = defaultdict(list)
+    for r in rows:
+        key = (setting(r), r["dataset"])
+        if r["tag"] == "raw":
+            rawb[key].append(r["bytes_up"])
+            continue
+        pts[key + (r["tag"], r["config"]["param"])].append((r["config"]["seed"], r["bytes_up"], ratio(r, ref)))
+    settings = sorted({k[:2] for k in pts}, key=lambda k: (["drifting", "static", "evolving", "natural"].index(k[0]),
+                                                           DS_ORDER.index(k[1])))
+    TAGS = ["fedcast-v2", "topk-q", "pdelta-q", "kfed-q"]
+    TL = {"fedcast-v2": "FedCAST-v2 (exact value + 8-bit)", "topk-q": "top-k magnitude + 8-bit",
+          "pdelta-q": "Periodic-Δ + 8-bit", "kfed-q": "k-FED + 8-bit"}
+    TC = {"fedcast-v2": COLOR["fedcast"], "topk-q": "#9467bd", "pdelta-q": COLOR["pdelta"], "kfed-q": COLOR["kfed"]}
+
+    def curve(st, ds, tag):
+        return sorted((np.mean([x[1] for x in v]), np.mean([x[2] for x in v]))
+                      for (s1, d1, t1, p1), v in pts.items() if (s1, d1, t1) == (st, ds, tag))
+    # ---- figure
+    n = len(settings)
+    cols = 4
+    fig, axes = plt.subplots(int(math.ceil(n / cols)), cols, figsize=(10.5, 2.4 * math.ceil(n / cols)))
+    axes = np.atleast_1d(axes).ravel()
+    for a, (st, ds) in zip(axes, settings):
+        for tag in TAGS[::-1]:
+            c = curve(st, ds, tag)
+            if c:
+                a.plot([x[0] / 1e3 for x in c], np.minimum([x[1] for x in c], 1.5), marker="o", ms=2.5,
+                       lw=1.6 if tag == "fedcast-v2" else 0.9, color=TC[tag], label=TL[tag])
+        a.set_xscale("log")
+        a.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        a.set_title(f"{DS_LABEL.get(ds, ds)} ({st})", fontsize=7.5)
+        a.grid(alpha=0.25, lw=0.5)
+    for a in axes[n:]:
+        a.axis("off")
+    axes[0].set_ylabel("cost / Centralised-Raw")
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.03))
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    savefig(fig, "fig_combined")
+
+    # ---- bytes needed to reach thresholds
+    def need(c, thr):
+        prev = None
+        for b1, r1 in c:
+            if r1 <= thr:
+                if prev is None or prev[1] <= thr:
+                    return b1
+                w = (prev[1] - thr) / max(prev[1] - r1, 1e-12)
+                return math.exp(math.log(prev[0]) + w * (math.log(b1) - math.log(prev[0])))
+            prev = (b1, r1)
+        return float("nan")
+    lines = ["kB needed to reach cost ratio <= 1.05 / <= 1.10 (all methods use 8-bit quantised messages)", "",
+             "| Setting | " + " | ".join(TL[t] for t in TAGS) + " | best baseline / FedCAST-v2 (1.05) |",
+             "|---|" + "---|" * (len(TAGS) + 1)]
+    summary = {}
+    for st, ds in settings:
+        cells, n5 = [], {}
+        for t in TAGS:
+            c = curve(st, ds, t)
+            a5, a10 = need(c, 1.05), need(c, 1.10)
+            n5[t] = (a5, a10)
+            cells.append(("—" if math.isnan(a5) else f"{a5/1e3:.0f}") + " / " + ("—" if math.isnan(a10) else f"{a10/1e3:.0f}"))
+        base5 = [n5[t][0] for t in TAGS[1:] if not math.isnan(n5[t][0])]
+        f5 = n5["fedcast-v2"][0]
+        if math.isnan(f5):
+            factor = "FedCAST-v2 does not reach 1.05"
+        elif not base5:
+            factor = "only FedCAST-v2 reaches 1.05"
+        else:
+            factor = f"{min(base5) / f5:.2f}x"
+        summary[f"{st}|{ds}"] = {t: n5[t] for t in TAGS}
+        lines.append(f"| {DS_LABEL.get(ds, ds)} ({st}) | " + " | ".join(cells) + f" | {factor} |")
+
+    # ---- budget-matched (1/3/10 % of raw bytes) Friedman over all settings
+    levels = {"1%": 0.01, "3%": 0.03, "10%": 0.10}
+    blocks, blocks_all = [], []
+    for st, ds in settings:
+        rb = np.mean(rawb[(st, ds)]) if rawb[(st, ds)] else None
+        if not rb:
+            continue
+        for lev, frac in levels.items():
+            row = []
+            for t in TAGS:
+                c = curve(st, ds, t)
+                ok = [x for x in c if x[0] <= frac * rb * 1.0001]
+                row.append(min(x[1] for x in ok) if ok else float("nan"))
+            blocks_all.append(((st, ds, lev), row))
+            if not any(math.isnan(v) for v in row):
+                blocks.append(row)
+    lines += ["", "Best cost ratio attainable within a budget of 1% / 3% / 10% of Centralised-Raw bytes", "",
+              "| Setting | Budget | " + " | ".join(TL[t] for t in TAGS) + " |", "|---|---|" + "---|" * len(TAGS)]
+    for (st, ds, lev), row in blocks_all:
+        finite = [v for v in row if not math.isnan(v)]
+        best = min(finite) if finite else None
+        cells = ["—" if math.isnan(v) else (f"**{v:.3f}**" if best is not None and v == best else f"{v:.3f}") for v in row]
+        lines.append(f"| {DS_LABEL.get(ds, ds)} ({st}) | {lev} | " + " | ".join(cells) + " |")
+    out = {"savings": summary}
+    if len(blocks) >= 3:
+        B = np.array(blocks)
+        ranks = np.apply_along_axis(stats.rankdata, 1, B).mean(0)
+        chi, p = stats.friedmanchisquare(*B.T)
+        cd = 2.569 * math.sqrt(4 * 5 / (6 * len(blocks)))
+        out["friedman"] = dict(n_blocks=len(blocks), mean_ranks=dict(zip(TAGS, ranks.tolist())), chi2=float(chi),
+                               p=float(p), nemenyi_cd=cd)
+        lines += ["", f"Friedman over {len(blocks)} blocks where all four are feasible: mean ranks "
+                  + ", ".join(f"{TL[t]} {r:.2f}" for t, r in zip(TAGS, ranks)) + f"; chi2 = {chi:.1f}, p = {p:.2g}, "
+                  f"Nemenyi CD = {cd:.2f}"]
+        cd_diagram_generic(dict(zip([TL[t] for t in TAGS], ranks)), cd, "fig_cd_combined",
+                           {TL[t]: TC[t] for t in TAGS})
+    # ---- paired: FedCAST-v2 vs top-k (same budget, seed)
+    lines += ["", "| Setting group | pairs | FedCAST-v2 better than top-k+8-bit | mean gain | one-sided Wilcoxon p |",
+              "|---|---|---|---|---|"]
+    for grp in ["static", "drifting", "evolving", "natural", "non-stationary", "all"]:
+        a, b = [], []
+        for (st, ds, tag, prm), v in pts.items():
+            if tag != "fedcast-v2":
+                continue
+            if not (grp == "all" or st == grp or (grp == "non-stationary" and st != "static")):
+                continue
+            o = {x[0]: x[2] for x in pts.get((st, ds, "topk-q", prm), [])}
+            for sd, _, r in v:
+                if sd in o:
+                    a.append(r)
+                    b.append(o[sd])
+        if len(a) >= 6:
+            a, b = np.array(a), np.array(b)
+            w = stats.wilcoxon(a, b, alternative="less")
+            out[f"paired|{grp}"] = dict(n=len(a), better=float((a < b).mean()), gain=float(np.mean(b - a)), p=float(w.pvalue))
+            lines.append(f"| {grp} | {len(a)} | {(a < b).mean()*100:.0f}% | {np.mean(b - a):+.4f} | {w.pvalue:.2g} |")
+    (TAB / "E13_combined.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / "E13_combined.json", "w"), indent=1, default=float)
+    print("\n".join(lines))
+
+
+def cd_diagram_generic(ranks: dict, cd: float, name: str, colors: dict):
+    items = sorted(ranks.items(), key=lambda kv: kv[1])
+    k = len(items)
+    fig, ax = plt.subplots(figsize=(4.2, 1.3))
+    ax.set_xlim(0.7, k + 0.3)
+    ax.set_ylim(0, 1.25)
+    ax.axis("off")
+    ax.hlines(0.8, 1, k, color="k", lw=0.8)
+    for r in range(1, k + 1):
+        ax.vlines(r, 0.78, 0.82, color="k", lw=0.8)
+        ax.text(r, 0.9, str(r), ha="center", fontsize=7)
+    for i, (m, r) in enumerate(items):
+        y = 0.55 - 0.15 * (i % 4)
+        ax.plot([r, r], [0.8, y], color=colors[m], lw=0.8)
+        ax.text(r, y - 0.07, f"{m} ({r:.2f})", ha="center", fontsize=6, color=colors[m])
+    ax.hlines(1.1, 1, 1 + cd, color="k", lw=1.5)
+    ax.text(1 + cd / 2, 1.15, f"CD = {cd:.2f}", ha="center", fontsize=6.5)
+    savefig(fig, name)
+
 
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "kafka"]
+    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12", "e13", "kafka"]
     for w in which:
         globals()[w]()
         print("done", w, flush=True)

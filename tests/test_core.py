@@ -211,3 +211,41 @@ def test_uniform_staleness_bound_holds_for_every_centre_set():
         J1 = cf_cost(n1, L1, S1, C).min(1).sum()
         J0 = cf_cost(n0, L0, S0, C).min(1).sum()
         assert abs(J1 - J0) <= U + 1e-6
+
+
+def test_quantised_codec_roundtrip_and_size():
+    d = 12
+    r = rng(3)
+    n = r.uniform(1, 50, 6)
+    mu = r.normal(size=(6, d)) * 2
+    var = r.uniform(0.1, 1.0, 6)
+    LS, SS = n[:, None] * mu, n * (var + (mu ** 2).sum(1))
+    s = codec.Summary(codec.KIND_DELTA, 2, 4, 100.0, np.arange(6), n, LS, SS, np.full(6, 99.5), np.array([9]))
+    buf = codec.encode_summary_q(s)
+    assert len(buf) == codec.summary_size_q(6, 1, d)
+    assert len(buf) < 0.6 * codec.summary_size(6, 1, d)          # ~2.8x smaller per record
+    q = codec.decode_summary(buf)
+    assert q.kind == codec.KIND_DELTA and list(q.deleted) == [9]
+    mu_q = q.LS / q.n[:, None]
+    span = mu.max(0) - mu.min(0)
+    assert np.all(np.abs(mu_q - mu) <= span / 255 * 1.01 + 1e-2)  # about half a step per dimension
+    assert np.allclose(q.t, 99.5, atol=1e-3)
+    assert np.allclose(q.SS / q.n - (mu_q ** 2).sum(1), var, rtol=2e-3, atol=1e-3)
+
+
+def test_lloyd_excess_is_exact():
+    """Server centre c^ = L^/N^ from stale summaries; true data adds dL, dN. With assignments
+    fixed, cost(c^) - min_c cost(c) == ||dL - dN c^||^2 / N  (N = true mass), exactly."""
+    r = rng(8)
+    old = r.normal(1.0, 1.0, (300, 5))
+    new = r.normal(2.5, 0.7, (80, 5))           # drift: new mass away from the old centre
+    c_hat = old.mean(0)
+    allp = np.vstack([old, new])
+    cost = lambda c: ((allp - c) ** 2).sum()
+    excess = cost(c_hat) - cost(allp.mean(0))
+    dL, dN, N = new.sum(0), len(new), len(allp)
+    assert np.isclose(excess, ((dL - dN * c_hat) ** 2).sum() / N)
+    # and growth "in place" (new points centred on c^) is worth ~nothing
+    inplace = r.normal(0, 1.0, (80, 5)) + c_hat
+    inplace -= inplace.mean(0) - c_hat
+    assert np.isclose(((inplace.sum(0) - 80 * c_hat) ** 2).sum(), 0.0, atol=1e-8)

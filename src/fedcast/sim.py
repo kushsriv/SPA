@@ -58,6 +58,7 @@ class SimConfig:
     q_horizon: float = 60.0          # a full summary may cost at most this many seconds of budget
     q_min: int = 4
     q_floor_k: float = 1.0           # q >= q_floor_k * k
+    quant: bool = False              # 8-bit quantised deltas with error feedback
     mr_eps: float = 0.5              # fedcast-mr: max relative scatter increase when coarsening
     aq_mode: str = "k"               # adaptive_q floor: "k" (q >= q_floor_k * k) | "fidelity" (data-driven)
     aq_eps: float = 0.25             # fidelity floor: max relative scatter increase allowed
@@ -129,7 +130,7 @@ def fidelity_resolution(cfg: SimConfig, node, now: float) -> int:
 def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
     t0 = time.time()
     rng = np.random.default_rng(cfg.seed)
-    streams = partition(ds.y, cfg.nodes, cfg.partition, cfg.duration, cfg.seed, ds.u)
+    streams = partition(ds.y, cfg.nodes, cfg.partition, cfg.duration, cfg.seed, ds.u, ds.groups)
     focus = exclusive_classes(ds.y, streams)
     counts = np.bincount(ds.y)
     minority = [int(c) for c in np.flatnonzero((counts > 0) & (counts < 0.05 * len(ds.y)))]
@@ -151,6 +152,7 @@ def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
     for i, s in enumerate(streams):
         k_loc = cfg.k_local or max(1, len(np.unique(ds.y[s.idx])))
         nodes.append(EdgeNode(i, d, node_params, make_policy(cfg, k_loc)))
+        nodes[-1].quant = cfg.quant
     if cfg.method == "raw":
         q_central = cfg.mc.max_mc * cfg.nodes
         coord = CentralCoordinator(k, d, MCParams(**{**asdict(cfg.mc), "max_mc": q_central}),
@@ -211,7 +213,11 @@ def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
                 continue
             summ = (node.build_kfed(t, node.policy.k_local, kfed_rng) if dec.kfed
                     else node.build(t, full=dec.full, only_slots=dec.only_slots))
-            buf = codec.encode_summary(summ)
+            if cfg.quant:
+                buf = codec.encode_summary_q(summ)
+                summ = codec.decode_summary(buf)   # error feedback: remember what the server really holds
+            else:
+                buf = codec.encode_summary(summ)
             payload = len(buf) + codec.KAFKA_RECORD_OVERHEAD
             node.commit(summ, payload)
             arr, wire, _ = links[i].send(t, payload)
