@@ -28,13 +28,16 @@ def _common(p):
     p.add_argument("--partition", default="dirichlet:0.3")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--max-points", type=int, default=60000)
-    p.add_argument("--rank", default="objective", choices=["objective", "norm", "uniform", "hybrid", "lloyd", "lloydj"])
+    p.add_argument("--rank", default="objective",
+                   choices=["objective", "norm", "uniform", "hybrid", "lloyd", "lloydj", "lloyd+"])
+    p.add_argument("--overflow", action="store_true", help="use-it-or-lose-it sends (FedCAST-v3)")
     p.add_argument("--quant", action="store_true", help="8-bit quantised deltas with error feedback")
 
 
 def _cfg(a) -> SimConfig:
     return SimConfig(method=a.method, param=a.param, nodes=a.nodes, duration=a.duration,
-                     partition=a.partition, seed=a.seed, rank=a.rank, quant=a.quant)
+                     partition=a.partition, seed=a.seed, rank=a.rank, quant=a.quant,
+                     overflow=a.overflow)
 
 
 def main(argv=None):

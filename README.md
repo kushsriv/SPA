@@ -46,8 +46,10 @@ fedcast coordinator --dataset syndrift
 fedcast edges --dataset syndrift --method fedcast --param 20 --speed 10
 ```
 
+**Recommended configuration (FedCAST-v3):** `--method fedcast --rank lloyd+ --quant --overflow`, i.e. exact-value ranking with a magnitude tie-break, 8-bit deltas with error feedback, and use-it-or-lose-it sends.
+
 Methods: `fedcast` (param = bytes/s per node), `periodic` / `pdelta` / `kfed` (param = period in s), `change` (ε), `norm` (relative δ), `naive`, `raw`.
-Datasets: `syndrift`, `nslkdd`, `shuttle`, `pendigits`, `letter` (downloaded automatically from GitHub mirrors into `data/raw/`).
+Datasets: `syndrift`, `nslkdd`, `shuttle`, `pendigits`, `letter`, and naturally drifting real streams `gas` (Gas Sensor Drift, 36 months), `covtype` (CoverType in original order) and `intel` (Intel Berkeley Lab, naturally partitioned by sensor mote; use `--partition natural`). All are downloaded automatically from GitHub mirrors into `data/raw/`.
 
 ## Reproduce the paper
 

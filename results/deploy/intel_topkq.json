@@ -1,0 +1,49 @@
+{
+ "run_id": "intel_topkq",
+ "dataset": "intel",
+ "partition": "natural",
+ "method": "fedcast",
+ "param": 10,
+ "extra": [
+  "--rank",
+  "norm",
+  "--quant"
+ ],
+ "nodes": 10,
+ "speed": 5.0,
+ "bytes_up_estimate": 37904.0,
+ "kafka_txmsg_bytes": 35924.0,
+ "kafka_tx_bytes": 51492.0,
+ "msgs_up": 110,
+ "delivery_errors": 0,
+ "bytes_by_link": {
+  "lan": 11460.0,
+  "wan": 11520.0,
+  "cellular": 7532.0,
+  "poor": 7392.0
+ },
+ "coordinator": {
+  "applied": 110,
+  "e2e_ms_p50": 35.91430187225342,
+  "e2e_ms_p95": 72.08108901977539,
+  "model_version": 142
+ },
+ "memory_mb": {
+  "kafka": 333.7,
+  "coord": 203.0,
+  "edge0": 110.1,
+  "edge1": 109.6,
+  "edge2": 109.3,
+  "edge3": 109.3,
+  "edge4": 109.3,
+  "edge5": 109.6,
+  "edge6": 109.6,
+  "edge7": 109.7,
+  "edge8": 109.5,
+  "edge9": 109.4
+ },
+ "quality": {
+  "cost_ratio": 1.187569583860915,
+  "n_evals": 28
+ }
+}

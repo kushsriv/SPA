@@ -1,0 +1,22 @@
+{
+ "method": "pdelta",
+ "param": 120.0,
+ "dataset": "intel",
+ "nodes": 10,
+ "speed": 5.0,
+ "wall_seconds": 61.20419359207153,
+ "node_ids": [
+  5
+ ],
+ "bytes_up_estimate": 1980.0,
+ "kafka_txmsg_bytes": 1926.0,
+ "kafka_tx_bytes": 2487.0,
+ "msgs_up": 3,
+ "delivery_errors": 0,
+ "produce_latency_ms_p50": 192.90685653686523,
+ "produce_latency_ms_p95": 196.03044986724854,
+ "global_model_latency_ms_p50": 113.54970932006836,
+ "ari": null,
+ "edge_rss_mb": 159.83203125,
+ "series": []
+}

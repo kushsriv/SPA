@@ -1,0 +1,22 @@
+{
+ "method": "fedcast",
+ "param": 10.0,
+ "dataset": "intel",
+ "nodes": 10,
+ "speed": 5.0,
+ "wall_seconds": 61.20306086540222,
+ "node_ids": [
+  5
+ ],
+ "bytes_up_estimate": 3876.0,
+ "kafka_txmsg_bytes": 3678.0,
+ "kafka_tx_bytes": 5231.0,
+ "msgs_up": 11,
+ "delivery_errors": 0,
+ "produce_latency_ms_p50": 201.22170448303223,
+ "produce_latency_ms_p95": 204.9630880355835,
+ "global_model_latency_ms_p50": 108.74056816101074,
+ "ari": null,
+ "edge_rss_mb": 160.16796875,
+ "series": []
+}

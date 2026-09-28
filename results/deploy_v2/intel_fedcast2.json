@@ -1,0 +1,49 @@
+{
+ "run_id": "intel_fedcast2",
+ "dataset": "intel",
+ "partition": "natural",
+ "method": "fedcast",
+ "param": 10,
+ "extra": [
+  "--rank",
+  "lloyd",
+  "--quant"
+ ],
+ "nodes": 10,
+ "speed": 5.0,
+ "bytes_up_estimate": 28686.0,
+ "kafka_txmsg_bytes": 26400.0,
+ "kafka_tx_bytes": 43227.0,
+ "msgs_up": 127,
+ "delivery_errors": 0,
+ "bytes_by_link": {
+  "lan": 8388.0,
+  "wan": 8484.0,
+  "cellular": 5160.0,
+  "poor": 6654.0
+ },
+ "coordinator": {
+  "applied": 127,
+  "e2e_ms_p50": 52.9780387878418,
+  "e2e_ms_p95": 265.73784351348866,
+  "model_version": 51
+ },
+ "memory_mb": {
+  "kafka": 321.6,
+  "coord": 202.8,
+  "edge0": 761.4,
+  "edge1": 669.3,
+  "edge2": 609.0,
+  "edge3": 627.6,
+  "edge4": 728.0,
+  "edge5": 730.0,
+  "edge6": 782.3,
+  "edge7": 727.7,
+  "edge8": 718.5,
+  "edge9": 589.3
+ },
+ "quality": {
+  "cost_ratio": 1.7453653117139538,
+  "n_evals": 28
+ }
+}

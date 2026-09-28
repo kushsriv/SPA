@@ -1,0 +1,22 @@
+{
+ "method": "fedcast",
+ "param": 10.0,
+ "dataset": "syndrift",
+ "nodes": 10,
+ "speed": 5.0,
+ "wall_seconds": 61.20825743675232,
+ "node_ids": [
+  4
+ ],
+ "bytes_up_estimate": 4204.0,
+ "kafka_txmsg_bytes": 4024.0,
+ "kafka_tx_bytes": 5453.0,
+ "msgs_up": 10,
+ "delivery_errors": 0,
+ "produce_latency_ms_p50": 199.16856288909912,
+ "produce_latency_ms_p95": 204.1292905807495,
+ "global_model_latency_ms_p50": 117.11335182189941,
+ "ari": null,
+ "edge_rss_mb": 165.1875,
+ "series": []
+}

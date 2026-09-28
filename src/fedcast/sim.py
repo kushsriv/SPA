@@ -53,7 +53,8 @@ class SimConfig:
     use_novelty: bool = True
     full_summary: bool = False
     gamma: float = 0.9
-    rank: str = "objective"       # objective | norm | uniform (FedCAST scoring)
+    rank: str = "objective"       # objective | norm | uniform | lloyd | lloyd+ (FedCAST scoring)
+    overflow: bool = False           # use-it-or-lose-it sends when the token bucket is about to overflow
     adaptive_q: bool = False         # budget-adaptive summary resolution
     q_horizon: float = 60.0          # a full summary may cost at most this many seconds of budget
     q_min: int = 4
@@ -74,7 +75,8 @@ def make_policy(cfg: SimConfig, k_local: int):
     if m == "fedcast":
         return FedCAST(budget=cfg.param * cfg.window, window=cfg.window, use_price=cfg.use_price,
                        use_dual=cfg.use_dual, use_novelty=cfg.use_novelty, full=cfg.full_summary,
-                       gamma=cfg.gamma, eta=cfg.eta, rho=cfg.rho, rank=cfg.rank)
+                       gamma=cfg.gamma, eta=cfg.eta, rho=cfg.rho, rank=cfg.rank,
+                       use_overflow=cfg.overflow)
     if m == "fedcast-mr":
         return FedCASTMR(budget=cfg.param * cfg.window, window=cfg.window, use_price=cfg.use_price,
                          use_dual=cfg.use_dual, use_novelty=cfg.use_novelty, gamma=cfg.gamma, eta=cfg.eta,

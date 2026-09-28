@@ -92,8 +92,10 @@ def deploy(run_id: str, dataset: str, partition_spec: str, method: str, param: f
         f.unlink()
     vol = f"-v {rdir}:/res"
     raw = method == "raw"
+    # the coordinator must outlast the longest silence between sends (periodic baselines)
+    idle = max(15.0, 2.5 * (param if method in ("periodic", "pdelta", "kfed") else 10.0) / speed)
     sh(f"docker run -d --label fsc --name coord --network {NET} {vol} {IMG} coordinator --dataset {dataset} "
-       f"--bootstrap kafka:9092 --idle-exit 12 --out /res/coord.json --history /res/history.jsonl"
+       f"--bootstrap kafka:9092 --idle-exit {idle:.0f} --out /res/coord.json --history /res/history.jsonl"
        + (" --raw" if raw else ""))
     time.sleep(4)
     t0 = time.time() + 25 + nodes * 1.5
@@ -163,10 +165,10 @@ def offline_quality(history: Path, dataset: str, spec: str, nodes: int, duration
 
 
 SUITE = [
-    ("syndrift_fedcast2", "syndrift", "dirichlet:0.3", "fedcast", 10, ["--rank", "lloyd", "--quant"]),
+    ("syndrift_fedcast3", "syndrift", "dirichlet:0.3", "fedcast", 10, ["--rank", "lloyd+", "--quant", "--overflow"]),
     ("syndrift_topkq", "syndrift", "dirichlet:0.3", "fedcast", 10, ["--rank", "norm", "--quant"]),
     ("syndrift_pdeltaq", "syndrift", "dirichlet:0.3", "pdelta", 120, ["--quant"]),
-    ("intel_fedcast2", "intel", "natural", "fedcast", 10, ["--rank", "lloyd", "--quant"]),
+    ("intel_fedcast3", "intel", "natural", "fedcast", 10, ["--rank", "lloyd+", "--quant", "--overflow"]),
     ("intel_topkq", "intel", "natural", "fedcast", 10, ["--rank", "norm", "--quant"]),
     ("intel_pdeltaq", "intel", "natural", "pdelta", 120, ["--quant"]),
 ]

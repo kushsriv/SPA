@@ -273,8 +273,13 @@ class FedCAST(Policy):
                  gamma: float = 0.9, novelty_frac: float = 0.01, novelty_min: float = 3.0,
                  far_factor: float = 3.0, use_price: bool = True, use_dual: bool = True,
                  use_novelty: bool = True, use_bucket: bool = True, full: bool = False,
-                 lam0: float | None = None, rank: str = "objective"):
+                 lam0: float | None = None, rank: str = "objective", tie_eps: float = 0.1,
+                 use_overflow: bool = False, overflow_frac: float = 0.95):
         self.rank = rank
+        self.tie_eps = tie_eps
+        # use-it-or-lose-it: tokens above the bucket capacity are lost, so when the bucket is
+        # about to overflow a send has no opportunity cost and the threshold is waived
+        self.use_overflow, self.overflow_frac = use_overflow, overflow_frac
         self.B, self.W, self.rho, self.eta, self.gamma = budget, window, rho, eta, gamma
         self.novelty_frac, self.novelty_min, self.far_factor = novelty_frac, novelty_min, far_factor
         self.use_price, self.use_dual, self.use_novelty = use_price, use_dual, use_novelty
@@ -298,16 +303,26 @@ class FedCAST(Policy):
         from .codec import KAFKA_RECORD_OVERHEAD, summary_size
         self._refill(node, now)
         g = node.global_model
-        if g is None and self.rank in ("objective", "hybrid", "lloyd", "lloydj"):  # bootstrap: the server has no model yet
+        if g is None and self.rank in ("objective", "hybrid", "lloyd", "lloydj", "lloyd+"):  # bootstrap: the server has no model yet
             size = node.pending_bytes(full=True)
             ok = size > 0 and not node.sent and ((not self.use_bucket) or self.tokens >= size)
             return Decision(full=True) if ok else None
-        if self.rank in ("lloyd", "lloydj"):
+        if self.rank in ("lloyd", "lloydj", "lloyd+"):
             slots, dels = node.dirty()
             if not slots and not dels:
                 return None
             slots, e_s, dels, e_d, novelty = _per_mc_lloyd(node, now, slots, dels, g.centers, g.weights,
                                                            with_assignment=self.rank == "lloydj")
+            if self.rank == "lloyd+":
+                # value first, information second: exact value dominates the ranking, and change
+                # magnitude (weight tie_eps) breaks ties among zero-value refinements, which are
+                # then sent only when the dual threshold says the budget is abundant
+                _, m_s, _, m_d, _ = _per_mc_simple(node, now, slots, dels, "norm")
+                zv = e_s.sum() + e_d.sum()
+                zm = max(m_s.sum() + m_d.sum(), 1e-12)
+                scale = zv if zv > 0 else 1.0
+                e_s = e_s + self.tie_eps * scale * m_s / zm
+                e_d = e_d + self.tie_eps * scale * m_d / zm
         else:
             slots, e_s, dels, e_d, novelty = per_mc_staleness(
                 node, now, g.centers if g is not None else None, g.radii if g is not None else None,
@@ -338,7 +353,8 @@ class FedCAST(Policy):
             self.lam = max(score, 1e-12)
         mass = float(node.mc.total_weight(now))
         novel = self.use_novelty and novelty >= max(self.novelty_min, self.novelty_frac * mass)
-        if (score >= self.lam or novel) and affordable:
+        overflow = self.use_overflow and self.tokens is not None and self.tokens >= self.overflow_frac * self.cap
+        if (score >= self.lam or novel or overflow) and affordable:
             return Decision(full=self.full, only_slots=chosen)
         return None
 

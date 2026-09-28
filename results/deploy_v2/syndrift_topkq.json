@@ -1,0 +1,49 @@
+{
+ "run_id": "syndrift_topkq",
+ "dataset": "syndrift",
+ "partition": "dirichlet:0.3",
+ "method": "fedcast",
+ "param": 10,
+ "extra": [
+  "--rank",
+  "norm",
+  "--quant"
+ ],
+ "nodes": 10,
+ "speed": 5.0,
+ "bytes_up_estimate": 40496.0,
+ "kafka_txmsg_bytes": 38120.0,
+ "kafka_tx_bytes": 56435.0,
+ "msgs_up": 132,
+ "delivery_errors": 0,
+ "bytes_by_link": {
+  "lan": 12094.0,
+  "wan": 12332.0,
+  "cellular": 8036.0,
+  "poor": 8034.0
+ },
+ "coordinator": {
+  "applied": 132,
+  "e2e_ms_p50": 43.900489807128906,
+  "e2e_ms_p95": 91.06589555740355,
+  "model_version": 139
+ },
+ "memory_mb": {
+  "kafka": 336.1,
+  "coord": 106.9,
+  "edge0": 113.1,
+  "edge1": 113.2,
+  "edge2": 113.5,
+  "edge3": 113.4,
+  "edge4": 113.5,
+  "edge5": 113.7,
+  "edge6": 113.2,
+  "edge7": 113.0,
+  "edge8": 113.2,
+  "edge9": 113.2
+ },
+ "quality": {
+  "cost_ratio": 1.018640201922753,
+  "n_evals": 28
+ }
+}

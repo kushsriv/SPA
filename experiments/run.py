@@ -145,6 +145,10 @@ def experiments(seeds: int):
                      for B in (2, 5, 10, 20, 50) for s in S]
         E["E13"] += [(ds, v(base, method=m, param=T, seed=s, **Q), f"{m}-q")
                      for m in ("pdelta", "kfed") for T in (30, 60, 120, 240) for s in S]
+    # E14 - FedCAST-v3: exact value first, magnitude tie-break, 8-bit deltas, use-it-or-lose-it
+    V3 = {"rank": "lloyd+", "quant": True, "overflow": True}
+    E["E14"] = [(ds, v(base, method="fedcast", param=B, seed=s, **V3), "fedcast-v3")
+                for ds, base in settings for B in (2, 5, 10, 20, 50) for s in S]
     return E
 
 

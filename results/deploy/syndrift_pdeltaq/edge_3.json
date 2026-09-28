@@ -1,0 +1,22 @@
+{
+ "method": "pdelta",
+ "param": 120.0,
+ "dataset": "syndrift",
+ "nodes": 10,
+ "speed": 5.0,
+ "wall_seconds": 61.22521710395813,
+ "node_ids": [
+  3
+ ],
+ "bytes_up_estimate": 3034.0,
+ "kafka_txmsg_bytes": 2980.0,
+ "kafka_tx_bytes": 3541.0,
+ "msgs_up": 3,
+ "delivery_errors": 0,
+ "produce_latency_ms_p50": 207.9637050628662,
+ "produce_latency_ms_p95": 214.05832767486572,
+ "global_model_latency_ms_p50": 104.68459129333496,
+ "ari": null,
+ "edge_rss_mb": 165.10546875,
+ "series": []
+}

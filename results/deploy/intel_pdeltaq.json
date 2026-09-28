@@ -1,0 +1,47 @@
+{
+ "run_id": "intel_pdeltaq",
+ "dataset": "intel",
+ "partition": "natural",
+ "method": "pdelta",
+ "param": 120,
+ "extra": [
+  "--quant"
+ ],
+ "nodes": 10,
+ "speed": 5.0,
+ "bytes_up_estimate": 19608.0,
+ "kafka_txmsg_bytes": 19068.0,
+ "kafka_tx_bytes": 24716.0,
+ "msgs_up": 30,
+ "delivery_errors": 0,
+ "bytes_by_link": {
+  "lan": 5898.0,
+  "wan": 5846.0,
+  "cellular": 4136.0,
+  "poor": 3728.0
+ },
+ "coordinator": {
+  "applied": 30,
+  "e2e_ms_p50": 31.046152114868164,
+  "e2e_ms_p95": 95.53043842315674,
+  "model_version": 210
+ },
+ "memory_mb": {
+  "kafka": 351.1,
+  "coord": 205.1,
+  "edge0": 109.6,
+  "edge1": 109.6,
+  "edge2": 109.8,
+  "edge3": 109.8,
+  "edge4": 109.8,
+  "edge5": 109.5,
+  "edge6": 109.5,
+  "edge7": 109.8,
+  "edge8": 109.8,
+  "edge9": 109.3
+ },
+ "quality": {
+  "cost_ratio": 2.54740510744609,
+  "n_evals": 28
+ }
+}

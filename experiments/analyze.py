@@ -899,9 +899,9 @@ def e12():
     json.dump(out, open(TAB / "E12_lloyd.json", "w"), indent=1)
     print("\n".join(lines + per_ds))
 
-def e13():
-    """Combined evaluation: FedCAST-v2 vs quantised baselines on static, evolving and natural streams."""
-    rows = load("E13")
+def e13(extra: str | None = None, main: str = "fedcast-v2", tag_out: str = "E13_combined", fig_name: str = "fig_combined"):
+    """Combined evaluation: FedCAST vs quantised baselines on static, evolving and natural streams."""
+    rows = load("E13") + (load(extra) if extra else [])
     if not rows:
         return
     ref = raw_ssq(rows)
@@ -923,10 +923,11 @@ def e13():
         pts[key + (r["tag"], r["config"]["param"])].append((r["config"]["seed"], r["bytes_up"], ratio(r, ref)))
     settings = sorted({k[:2] for k in pts}, key=lambda k: (["drifting", "static", "evolving", "natural"].index(k[0]),
                                                            DS_ORDER.index(k[1])))
-    TAGS = ["fedcast-v2", "topk-q", "pdelta-q", "kfed-q"]
-    TL = {"fedcast-v2": "FedCAST-v2 (exact value + 8-bit)", "topk-q": "top-k magnitude + 8-bit",
-          "pdelta-q": "Periodic-Δ + 8-bit", "kfed-q": "k-FED + 8-bit"}
-    TC = {"fedcast-v2": COLOR["fedcast"], "topk-q": "#9467bd", "pdelta-q": COLOR["pdelta"], "kfed-q": COLOR["kfed"]}
+    TAGS = [main, "topk-q", "pdelta-q", "kfed-q"]
+    TL = {"fedcast-v2": "FedCAST-v2 (exact value + 8-bit)", "fedcast-v3": "FedCAST-v3 (value-first + 8-bit + use-it-or-lose-it)",
+          "topk-q": "top-k magnitude + 8-bit", "pdelta-q": "Periodic-Δ + 8-bit", "kfed-q": "k-FED + 8-bit"}
+    TC = {"fedcast-v2": COLOR["fedcast"], "fedcast-v3": COLOR["fedcast"], "topk-q": "#9467bd",
+          "pdelta-q": COLOR["pdelta"], "kfed-q": COLOR["kfed"]}
 
     def curve(st, ds, tag):
         return sorted((np.mean([x[1] for x in v]), np.mean([x[2] for x in v]))
@@ -941,7 +942,7 @@ def e13():
             c = curve(st, ds, tag)
             if c:
                 a.plot([x[0] / 1e3 for x in c], np.minimum([x[1] for x in c], 1.5), marker="o", ms=2.5,
-                       lw=1.6 if tag == "fedcast-v2" else 0.9, color=TC[tag], label=TL[tag])
+                       lw=1.6 if tag == main else 0.9, color=TC[tag], label=TL[tag])
         a.set_xscale("log")
         a.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         a.set_title(f"{DS_LABEL.get(ds, ds)} ({st})", fontsize=7.5)
@@ -952,7 +953,7 @@ def e13():
     h, lab = axes[0].get_legend_handles_labels()
     fig.legend(h, lab, loc="lower center", ncol=4, frameon=False, bbox_to_anchor=(0.5, -0.03))
     fig.tight_layout(rect=(0, 0.04, 1, 1))
-    savefig(fig, "fig_combined")
+    savefig(fig, fig_name)
 
     # ---- bytes needed to reach thresholds
     def need(c, thr):
@@ -966,7 +967,7 @@ def e13():
             prev = (b1, r1)
         return float("nan")
     lines = ["kB needed to reach cost ratio <= 1.05 / <= 1.10 (all methods use 8-bit quantised messages)", "",
-             "| Setting | " + " | ".join(TL[t] for t in TAGS) + " | best baseline / FedCAST-v2 (1.05) |",
+             "| Setting | " + " | ".join(TL[t] for t in TAGS) + " | best baseline / FedCAST (1.05) |",
              "|---|" + "---|" * (len(TAGS) + 1)]
     summary = {}
     for st, ds in settings:
@@ -977,11 +978,11 @@ def e13():
             n5[t] = (a5, a10)
             cells.append(("—" if math.isnan(a5) else f"{a5/1e3:.0f}") + " / " + ("—" if math.isnan(a10) else f"{a10/1e3:.0f}"))
         base5 = [n5[t][0] for t in TAGS[1:] if not math.isnan(n5[t][0])]
-        f5 = n5["fedcast-v2"][0]
+        f5 = n5[main][0]
         if math.isnan(f5):
-            factor = "FedCAST-v2 does not reach 1.05"
+            factor = "FedCAST does not reach 1.05"
         elif not base5:
-            factor = "only FedCAST-v2 reaches 1.05"
+            factor = "only FedCAST reaches 1.05"
         else:
             factor = f"{min(base5) / f5:.2f}x"
         summary[f"{st}|{ds}"] = {t: n5[t] for t in TAGS}
@@ -1021,15 +1022,15 @@ def e13():
         lines += ["", f"Friedman over {len(blocks)} blocks where all four are feasible: mean ranks "
                   + ", ".join(f"{TL[t]} {r:.2f}" for t, r in zip(TAGS, ranks)) + f"; chi2 = {chi:.1f}, p = {p:.2g}, "
                   f"Nemenyi CD = {cd:.2f}"]
-        cd_diagram_generic(dict(zip([TL[t] for t in TAGS], ranks)), cd, "fig_cd_combined",
+        cd_diagram_generic(dict(zip([TL[t] for t in TAGS], ranks)), cd, fig_name.replace("fig_", "fig_cd_"),
                            {TL[t]: TC[t] for t in TAGS})
     # ---- paired: FedCAST-v2 vs top-k (same budget, seed)
-    lines += ["", "| Setting group | pairs | FedCAST-v2 better than top-k+8-bit | mean gain | one-sided Wilcoxon p |",
+    lines += ["", f"| Setting group | pairs | {main} better than top-k+8-bit | mean gain | one-sided Wilcoxon p |",
               "|---|---|---|---|---|"]
     for grp in ["static", "drifting", "evolving", "natural", "non-stationary", "all"]:
         a, b = [], []
         for (st, ds, tag, prm), v in pts.items():
-            if tag != "fedcast-v2":
+            if tag != main:
                 continue
             if not (grp == "all" or st == grp or (grp == "non-stationary" and st != "static")):
                 continue
@@ -1043,9 +1044,13 @@ def e13():
             w = stats.wilcoxon(a, b, alternative="less")
             out[f"paired|{grp}"] = dict(n=len(a), better=float((a < b).mean()), gain=float(np.mean(b - a)), p=float(w.pvalue))
             lines.append(f"| {grp} | {len(a)} | {(a < b).mean()*100:.0f}% | {np.mean(b - a):+.4f} | {w.pvalue:.2g} |")
-    (TAB / "E13_combined.md").write_text("\n".join(lines) + "\n")
-    json.dump(out, open(TAB / "E13_combined.json", "w"), indent=1, default=float)
+    (TAB / f"{tag_out}.md").write_text("\n".join(lines) + "\n")
+    json.dump(out, open(TAB / f"{tag_out}.json", "w"), indent=1, default=float)
     print("\n".join(lines))
+
+
+def e14():
+    e13(extra="E14", main="fedcast-v3", tag_out="E14_v3", fig_name="fig_v3")
 
 
 def cd_diagram_generic(ranks: dict, cd: float, name: str, colors: dict):
@@ -1069,7 +1074,7 @@ def cd_diagram_generic(ranks: dict, cd: float, name: str, colors: dict):
 
 
 if __name__ == "__main__":
-    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12", "e13", "kafka"]
+    which = sys.argv[1:] or ["e1", "e1_savings", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12", "e13", "e14", "kafka"]
     for w in which:
         globals()[w]()
         print("done", w, flush=True)

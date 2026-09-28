@@ -1,0 +1,47 @@
+{
+ "run_id": "syndrift_pdeltaq",
+ "dataset": "syndrift",
+ "partition": "dirichlet:0.3",
+ "method": "pdelta",
+ "param": 120,
+ "extra": [
+  "--quant"
+ ],
+ "nodes": 10,
+ "speed": 5.0,
+ "bytes_up_estimate": 30072.0,
+ "kafka_txmsg_bytes": 29532.0,
+ "kafka_tx_bytes": 35142.0,
+ "msgs_up": 30,
+ "delivery_errors": 0,
+ "bytes_by_link": {
+  "lan": 9054.0,
+  "wan": 8818.0,
+  "cellular": 6308.0,
+  "poor": 5892.0
+ },
+ "coordinator": {
+  "applied": 10,
+  "e2e_ms_p50": 62.97874450683594,
+  "e2e_ms_p95": 86.32874488830565,
+  "model_version": 24
+ },
+ "memory_mb": {
+  "kafka": 334.5,
+  "coord": NaN,
+  "edge0": 113.2,
+  "edge1": 113.2,
+  "edge2": 113.3,
+  "edge3": 113.0,
+  "edge4": 113.0,
+  "edge5": 113.2,
+  "edge6": 113.4,
+  "edge7": 113.3,
+  "edge8": 113.0,
+  "edge9": 112.9
+ },
+ "quality": {
+  "cost_ratio": 4.320773988043105,
+  "n_evals": 28
+ }
+}

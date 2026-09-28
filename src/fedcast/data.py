@@ -196,6 +196,20 @@ def covtype_natural(max_points: int = 60000) -> Dataset:
     return Dataset("covtype", X, y, u=u)
 
 
+def _cached(name: str, builder, max_points: int) -> Dataset:
+    """Cache processed arrays as .npz so repeated loads (and containers) skip the parsing."""
+    path = CACHE / f"{name}_{max_points}.npz"
+    if path.exists():
+        z = np.load(path, allow_pickle=False)
+        return Dataset(name, z["X"], z["y"], u=z["u"], groups=z["groups"] if z["groups"].size else None,
+                       k_override=int(z["k"]) or None)
+    ds = builder(max_points)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, X=ds.X, y=ds.y, u=ds.u, groups=ds.groups if ds.groups is not None else np.zeros(0),
+                        k=ds.k_override or 0)
+    return ds
+
+
 def load(name: str, seed: int = 0, max_points: int | None = None) -> Dataset:
     if name in ("synthetic", "syndrift"):
         ds = synthetic(seed=seed)
@@ -204,11 +218,11 @@ def load(name: str, seed: int = 0, max_points: int | None = None) -> Dataset:
     elif name in ("shuttle", "pendigits", "letter"):
         ds = pmlb(name)
     elif name == "intel":
-        return intel_lab(max_points or 60000)
+        return _cached("intel", intel_lab, max_points or 60000)
     elif name == "gas":
-        return gas_drift(max_points or 60000)
+        return _cached("gas", gas_drift, max_points or 60000)
     elif name == "covtype":
-        return covtype_natural(max_points or 60000)
+        return _cached("covtype", covtype_natural, max_points or 60000)
     else:
         raise ValueError(f"unknown dataset {name}")
     if max_points and len(ds.y) > max_points:

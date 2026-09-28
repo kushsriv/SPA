@@ -103,3 +103,79 @@ The defensible claim is sharper and more stream-specific than the original one:
 4. **A naturally partitioned, naturally drifting dataset** (e.g. per-sensor IoT or per-subnet network traces). Our datasets are static benchmarks turned into streams.
 5. **Stronger baselines:** top-k magnitude (done), quantised deltas (e.g. 8-bit CFs), and a recent federated clustering method with an unknown k (AFCL, AAAI 2025).
 6. **Solve the low-budget regime** properly. Adaptive resolution helps on some data; a learned or feedback-driven resolution (increase q while the server's cost keeps improving) is the natural next step.
+
+---
+
+# Round 2: attacking every weakness (E12–E14, deployment D1)
+
+## R2.1 A sharper core idea: the *exact value* of an update
+
+**Weakness attacked:** the objective ranking beat the FL-standard top-k magnitude ranking only weakly (57 % on evolving real streams, p = 0.09).
+
+**New idea.** With assignments fixed, the coordinator's centre for cluster j is ĉⱼ = L̂ⱼ/N̂ⱼ. When the true summaries add ΔLⱼ and ΔNⱼ, the k-means cost of cluster j at ĉⱼ exceeds its optimum by **exactly**
+
+> excessⱼ = ‖ΔLⱼ − ΔNⱼ ĉⱼ‖² / Nⱼ
+
+(proof: J(c) = Σ‖x−c‖² is minimised at the mean, and J(ĉ) − J(c*) = N‖ĉ − c*‖² = ‖L − Nĉ‖²/N; checked in `test_lloyd_excess_is_exact`). Every node knows ĉⱼ and Nⱼ from the broadcast model and its own contribution rⱼ to ΔLⱼ − ΔNⱼĉⱼ. The **marginal value** of sending micro-cluster *id* is the exact reduction of that excess, (2 u·rⱼ − ‖u‖²)/Nⱼ, and nodes pick greedily by value (`rank="lloyd"`). Two properties explain why it beats magnitude ranking:
+* a cluster that grows *in place* (ΔLS ≈ Δn·ĉ) has value ≈ 0, however large the change: magnitude ranking wastes bytes on exactly these updates;
+* new mass far from its centre, in a small global cluster, has high value (∝ distance² / Nⱼ): the first points of an emerging cluster.
+
+**Result (E12, same seeds and budgets, float32, 250 pairs):** it beats top-k magnitude in **75 %** of the 130 non-stationary pairs (**p = 7×10⁻⁹**) and the old objective ranking in 66 % (p = 7×10⁻⁶). It cuts the excess cost over the centralised learner by 86 % on SynDrift and 71 % on evolving Pen-Digits. On static streams it ties (38 %, p = 0.75).
+
+## R2.2 Byte efficiency: 8-bit deltas with error feedback
+
+Centroids are quantised to 8 bits per dimension relative to the message's own range, the count is float32 and the spread float16. A record drops from 24 + 4d to 14 + d bytes (2.7–3.5×). The node stores the *dequantised* copy as the server view, so quantisation error is corrected by the normal staleness mechanism (error feedback). Pilot: NSL-KDD evolving reaches the same quality with 2–3× fewer bytes. For fairness, **every baseline in E13/E14 uses the same 8-bit encoding.**
+
+## R2.3 Real, naturally drifting and naturally partitioned data
+
+**Weakness attacked:** only synthetic or artificially streamed static data. We added three real concept-drift streams, downloaded from GitHub mirrors:
+
+| Dataset | Why it matters |
+|---|---|
+| **Intel Berkeley Lab** (54 motes, 5 weeks) | *Naturally partitioned* (one zone of motes per node) and naturally drifting (daily cycles, battery decay, sensor faults) |
+| **Gas Sensor Array Drift** (36 months, 6 gases, 128 features) | Real sensor ageing |
+| **CoverType in original order** | A standard real concept-drift benchmark |
+
+## R2.4 Fixing the under-spending flaw → FedCAST-v3
+
+E13 showed that FedCAST-v2 **plateaus** at loose budgets: once every remaining update has zero exact value, it stops sending even with budget to spare (NSL-KDD static stuck at 1.043 at 1 %, 3 % and 10 % of raw traffic). Two principled fixes, together **FedCAST-v3**:
+1. **Value first, information second:** change magnitude, with weight 0.1, breaks ties among zero-value refinements.
+2. **Use-it-or-lose-it:** tokens above the bucket capacity are lost, so when the bucket is about to overflow a send has zero opportunity cost and the threshold is waived.
+
+## R2.5 Final combined evaluation (E14; 12 settings, 5 seeds, every method 8-bit)
+
+Paired against top-k magnitude + 8-bit (same budget, same seed):
+
+| Setting group | pairs | FedCAST-v3 better | mean cost-ratio gain | p (one-sided Wilcoxon) |
+|---|---|---|---|---|
+| Static | 100 | 35 % | −0.003 | 0.97 |
+| Drifting (SynDrift) | 25 | **80 %** | +0.062 | **1.1×10⁻⁴** |
+| Evolving real streams | 100 | **68 %** | +0.017 | **1.5×10⁻⁴** |
+| **Naturally drifting real streams** | 75 | **75 %** | +0.069 | **2.3×10⁻⁶** |
+| **All non-stationary** | 200 | **72 %** | +0.042 | **3.9×10⁻¹¹** |
+| All | 300 | 60 % | +0.027 | 2.4×10⁻⁸ |
+
+At matched budgets (Friedman over 31 blocks, p = 7×10⁻¹²), FedCAST-v3 (mean rank 1.68) and top-k + 8-bit (1.61) are statistically tied, and **both are far ahead of Periodic-Δ (3.23) and k-FED (3.48)**. FedCAST-v3 wins the *tight-budget* blocks on non-stationary data. For example, at 1 % of raw traffic: SynDrift 1.015 vs 1.052, Intel Lab 1.217 vs 1.429; at 3 %: Pen-Digits evolving 1.049 vs 1.114, Gas 1.127 vs 1.210. Top-k is marginally better on static streams at loose budgets.
+
+## R2.6 Real multi-container deployment (D1)
+
+Each of 10 edge nodes runs in its **own container** (own network stack, real TCP) against a real Kafka broker, with **kernel-enforced bandwidth caps** (`tc tbf`: 100 Mbit / 5 Mbit / 1 Mbit / 128 kbit per node). The sandbox kernel lacks `netem`, so delay and loss stay in the in-app emulator. Quality is measured offline from the coordinator's logged models against the simulated centralised learner.
+
+| Stream | FedCAST-v3 | Top-k + 8-bit | Periodic-Δ + 8-bit |
+|---|---|---|---|
+| SynDrift | **35.9 kB → 1.006** | 40.5 kB → 1.019 | 30.1 kB → 1.154 |
+| Intel Lab (natural partition) | **35.4 kB → 1.091** | 37.9 kB → 1.188 | 19.6 kB → 2.547 |
+
+All summaries were applied, with 0 delivery errors, a median end-to-end latency of 31–39 ms, and about 110 MB per edge container. These are single runs, consistent with the simulations.
+
+## R2.7 Updated rating
+
+| Dimension | Before round 2 | After round 2 |
+|---|---|---|
+| Research novelty | 6/10 | **7/10**: a principled, *exact* value-of-update criterion with a closed-form derivation, significant on real naturally drifting data (p = 2×10⁻⁶) and on all non-stationary streams (p = 4×10⁻¹¹) against the strongest FL baseline |
+| Evidence quality | synthetic and shuffled benchmarks, one machine | real drifting and naturally partitioned datasets, quantisation-fair baselines, multi-container deployment with kernel bandwidth caps |
+| Honest limits | — | ties top-k on static streams; Gas stays above 1.10 for every method; delay and loss not kernel-emulated; single-seed deployment runs; k known |
+
+**The claim a paper can now defend:** *For federated clustering of **evolving** streams under a byte budget, the value of an update is its exact reduction of the server's Lloyd excess cost. Communicating by value, rather than by change magnitude (the federated-learning standard) or by schedule (periodic, k-FED), significantly improves quality per byte on synthetic, evolving and naturally drifting real streams, and is on par on static ones.*
+
+**What would still raise it:** the unknown-k aggregator, a physical multi-device run with real wireless delay and loss, differential privacy on the quantised deltas, and a regret-style analysis of the value-greedy send policy.
