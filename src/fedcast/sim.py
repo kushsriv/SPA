@@ -129,7 +129,7 @@ def fidelity_resolution(cfg: SimConfig, node, now: float) -> int:
     return int(min(max(q_b, q_f, 2), cfg.mc.max_mc))
 
 
-def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
+def run(cfg: SimConfig, ds: Dataset, verbose: bool = False, probe=None) -> dict:
     t0 = time.time()
     rng = np.random.default_rng(cfg.seed)
     streams = partition(ds.y, cfg.nodes, cfg.partition, cfg.duration, cfg.seed, ds.u, ds.groups)
@@ -268,6 +268,8 @@ def run(cfg: SimConfig, ds: Dataset, verbose: bool = False) -> dict:
                 r["bytes"] = sum(nd.bytes_up for nd in nodes)
                 r["node_bytes"] = [nd.bytes_up for nd in nodes]
                 series.append(r)
+            if probe is not None and coord.model is not None:
+                probe(t, nodes, coord)
             if cfg.method == "fedcast":
                 lam_trace.append((t, [nd.policy.lam for nd in nodes]))
 
